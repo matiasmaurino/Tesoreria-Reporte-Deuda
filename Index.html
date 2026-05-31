@@ -2,8 +2,99 @@
 <html>
   <head>
     <base target="_top">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+      body { background-color: #f4f6f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+      .header-club { background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%); color: white; padding: 25px 15px; border-bottom-left-radius: 25px; border-bottom-right-radius: 25px; text-align: center; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+      .tarjeta-jugador { background: white; border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 3px 6px rgba(0,0,0,0.04); border-left: 6px solid #adb5bd; transition: transform 0.2s; }
+      .tarjeta-alerta { border-left: 6px solid #dc3545; background-color: #fff8f8; }
+      .badge-critico { background-color: #dc3545; color: white; font-size: 0.75rem; padding: 5px 9px; border-radius: 8px; font-weight: bold; }
+      .monto-deuda { color: #dc3545; font-weight: 600; }
+      .loader { display: none; text-align: center; margin: 40px 0; }
+    </style>
   </head>
   <body>
-    
+
+    <div class="header-club">
+      <h3 class="fw-bold m-0">⚽ Club Online</h3>
+      <small style="opacity: 0.85;">Panel de Control de Deudas para Técnicos</small>
+    </div>
+
+    <div class="container text-start">
+      <div class="mb-4 bg-white p-3 rounded-3 shadow-sm">
+        <label for="selectDivision" class="form-label fw-bold text-secondary">Seleccionar División / Categoría:</label>
+        <select id="selectDivision" class="form-select form-select-lg" onchange="cargarDeudas()">
+          <option value="">Cargando listado...</option>
+        </select>
+      </div>
+
+      <div id="loader" class="loader">
+        <div class="spinner-border text-dark" role="status"></div>
+        <div class="mt-2 text-muted small">Buscando jugadores en la base de datos...</div>
+      </div>
+
+      <div id="contenedorTarjetas"></div>
+    </div>
+
+    <script>
+      window.onload = function() {
+        google.script.run.withSuccessHandler(function(divisiones) {
+          let select = document.getElementById('selectDivision');
+          select.innerHTML = '<option value="">-- Elige una División --</option>';
+          divisiones.forEach(function(div) {
+            let opt = document.createElement('option');
+            opt.value = div;
+            opt.textContent = div;
+            select.appendChild(opt);
+          });
+        }).obtenerDivisiones();
+      };
+
+      function cargarDeudas() {
+        let division = document.getElementById('selectDivision').value;
+        let contenedor = document.getElementById('contenedorTarjetas');
+        let loader = document.getElementById('loader');
+        
+        if (!division) {
+          contenedor.innerHTML = '';
+          return;
+        }
+        
+        contenedor.innerHTML = '';
+        loader.style.display = 'block';
+        
+        google.script.run.withSuccessHandler(function(jugadores) {
+          loader.style.display = 'none';
+          
+          if(jugadores.length === 0) {
+            contenedor.innerHTML = '<div class="alert alert-light text-center shadow-sm">No se registran jugadores cargados en esta categoría.</div>';
+            return;
+          }
+          
+          let formateador = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 });
+          
+          jugadores.forEach(function(j) {
+            let divTarjeta = document.createElement('div');
+            divTarjeta.className = 'tarjeta-jugador' + (j.alerta ? ' tarjeta-alerta' : '');
+            
+            divTarjeta.innerHTML = `
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-dark" style="font-size: 1.05rem;">${j.nombre}</span>
+                ${j.alerta ? '<span class="badge-critico">🔴 Alerta: +2 Meses</span>' : '<span class="badge bg-light text-success fw-bold border">✓ Al día</span>'}
+              </div>
+              <div class="row g-2 text-muted small border-top pt-2 mt-1">
+                <div class="col-4">Mes Act: <br><span class="${j.mes1 > 0 ? 'monto-deuda' : ''}">${formateador.format(j.mes1)}</span></div>
+                <div class="col-4">Mes -1: <br><span class="${j.mes2 > 0 ? 'monto-deuda' : ''}">${formateador.format(j.mes2)}</span></div>
+                <div class="col-4">Mes -2: <br><span class="${j.mes3 > 0 ? 'monto-deuda' : ''}">${formateador.format(j.mes3)}</span></div>
+                <div class="col-12 text-end fw-bold text-dark border-top pt-2 mt-2" style="font-size: 0.95rem;">
+                  Total Deuda: <span class="text-primary">${formateador.format(j.total)}</span>
+                </div>
+              </div>
+            `;
+            contenedor.appendChild(divTarjeta);
+          });
+        }).obtenerDeudasPorDivision(division);
+      }
+    </script>
   </body>
 </html>
