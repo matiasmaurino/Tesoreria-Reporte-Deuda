@@ -21,11 +21,20 @@
     </div>
 
     <div class="container text-start">
-      <div class="mb-4 bg-white p-3 rounded-3 shadow-sm">
-        <label for="selectDivision" class="form-label fw-bold text-secondary">Seleccionar División / Categoría:</label>
-        <select id="selectDivision" class="form-select form-select-lg" onchange="cargarDeudas()">
-          <option value="">Cargando listado...</option>
-        </select>
+      <div class="bg-white p-3 rounded-3 shadow-sm mb-4">
+        
+        <div class="mb-3">
+          <label for="buscarDivision" class="form-label fw-bold text-secondary">🔍 Escribe para buscar división:</label>
+          <input type="text" id="buscarDivision" class="form-control form-control-lg" placeholder="Ej: Senior, 2010, Femenino..." oninput="filtrarDivisiones()">
+        </div>
+
+        <div>
+          <label for="selectDivision" class="form-label fw-bold text-secondary">📋 Selecciona la opción filtrada:</label>
+          <select id="selectDivision" class="form-select form-select-lg" onchange="cargarDeudas()">
+            <option value="">Cargando listado...</option>
+          </select>
+        </div>
+
       </div>
 
       <div id="loader" class="loader">
@@ -37,18 +46,44 @@
     </div>
 
     <script>
+      // Variable global para almacenar todas las divisiones originales cargadas desde la hoja
+      let todasLasDivisiones = [];
+
       window.onload = function() {
         google.script.run.withSuccessHandler(function(divisiones) {
-          let select = document.getElementById('selectDivision');
-          select.innerHTML = '<option value="">-- Elige una División --</option>';
-          divisiones.forEach(function(div) {
-            let opt = document.createElement('option');
-            opt.value = div;
-            opt.textContent = div;
-            select.appendChild(opt);
-          });
+          todasLasDivisiones = divisiones;
+          renderizarOpciones(todasLasDivisiones);
         }).obtenerDivisiones();
       };
+
+      // Función encargada de llenar el select con las opciones que correspondan
+      function renderizarOpciones(lista) {
+        let select = document.getElementById('selectDivision');
+        select.innerHTML = '<option value="">-- Elige una División (' + lista.length + ') --</option>';
+        
+        lista.forEach(function(div) {
+          let opt = document.createElement('option');
+          opt.value = div;
+          opt.textContent = div;
+          select.appendChild(opt);
+        });
+      }
+
+      // Función que filtra las opciones del desplegable en tiempo real a medida que escribes
+      function filtrarDivisiones() {
+        let textoBuscado = document.getElementById('buscarDivision').value.toLowerCase().trim();
+        let contenedor = document.getElementById('contenedorTarjetas');
+        
+        // Limpiar tarjetas de jugadores si el técnico decide refiltrar la lista
+        contenedor.innerHTML = '';
+        
+        // Filtrar el array global reteniendo solo las coincidencias
+        let divisionesFiltradas = todasLasDivisiones.filter(function(div) {
+          return div.toLowerCase().includes(textoBuscado);
+        });
+        
+        renderizarOpciones(divisionesFiltradas);
+      }
 
       function cargarDeudas() {
         let division = document.getElementById('selectDivision').value;

@@ -287,34 +287,56 @@ function doGet() {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
 }
 
+/**
+ * CORREGIDO: Obtiene las divisiones directamente desde la hoja limpia "Divisiones"
+ */
 function obtenerDivisiones() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
-  const hoja = ss.getSheetByName('AntiguedaddeDeuda');
-  if(!hoja) return [];
+  const hoja = ss.getSheetByName('Divisiones'); // <-- Cambiado a tu hoja de lista única
+  if (!hoja) return [];
+  
   const datos = hoja.getDataRange().getValues();
   let divisiones = [];
+  
+  // Empezamos desde i = 1 (fila 2) para saltear el encabezado "Divisiones"
   for (let i = 1; i < datos.length; i++) {
     let div = datos[i][0]; // Columna A
-    if (div && divisiones.indexOf(div) === -1 && !div.toLowerCase().includes("total")) {
-      divisiones.push(div);
+    if (div && divisiones.indexOf(div) === -1) {
+      divisiones.push(div.trim());
     }
   }
-  return divisiones.sort();
+  return divisiones; // Ya vienen ordenadas o mantiene el orden de tu lista
 }
 
+/**
+ * CORREGIDO: Busca los jugadores permitiendo coincidencias parciales por texto
+ * (Ej: Si el select tiene "Fútbol Masculino > 2010", matcheará con "Fútbol Masculino > 2010 - 1ra")
+ */
 function obtenerDeudasPorDivision(divisionBuscada) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
   const hojaDeuda = ss.getSheetByName('AntiguedaddeDeuda');
-  if(!hojaDeuda) return [];
+  if (!hojaDeuda) return [];
+  
   const datosDeuda = hojaDeuda.getDataRange().getValues();
   let resultados = [];
   
+  // Convertimos a minúsculas y limpiamos espacios de la división que seleccionó el técnico
+  let divisionLimpiaBuscada = divisionBuscada.toLowerCase().trim();
+  
   for (let i = 1; i < datosDeuda.length; i++) {
     let fila = datosDeuda[i];
-    if (fila[0] === divisionBuscada && !fila[0].toLowerCase().includes("total")) {
-      let nombre = fila[1]; // Columna B
-      let totalDeuda = fila[2]; // Columna C
-      let mes1 = parseFloat(fila[3]) || 0; // Columna D (Abr-26 / Mes de Alerta Mail)
+    
+    // Columna A del reporte guardado (Divisiones)
+    let divisionJugador = fila[0] ? fila[0].toString().toLowerCase().trim() : "";
+    
+    // EVITAMOS FILAS DE TOTALES Y VERIFICAMOS SI CONTIENE LA CADENA BUSCADA
+    if (divisionJugador !== "" && 
+        !divisionJugador.includes("total") && 
+        divisionJugador.includes(divisionLimpiaBuscada)) {
+      
+      let nombre = fila[1]; // Columna B: Nombre completo
+      let totalDeuda = fila[2]; // Columna C: SUM de INFORMAR TOTAL
+      let mes1 = parseFloat(fila[3]) || 0; // Columna D (Abr-26)
       let mes2 = parseFloat(fila[4]) || 0; // Columna E (Mar-26)
       let mes3 = parseFloat(fila[5]) || 0; // Columna F (Feb-26)
       
@@ -323,12 +345,14 @@ function obtenerDeudasPorDivision(divisionBuscada) {
       if (mes2 > 0) mesesConDeuda++;
       if (mes3 > 0) mesesConDeuda++;
       
-      // Indicador móvil: Debe más de 2 meses basándose en D, E y F
       let alertaCritica = (mesesConDeuda >= 2);
       
       resultados.push({
-        nombre: nombre, total: totalDeuda,
-        mes1: mes1, mes2: mes2, mes3: mes3,
+        nombre: nombre, 
+        total: totalDeuda,
+        mes1: mes1, 
+        mes2: mes2, 
+        mes3: mes3,
         alerta: alertaCritica
       });
     }
