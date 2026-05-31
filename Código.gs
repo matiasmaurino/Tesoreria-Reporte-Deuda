@@ -4,7 +4,7 @@ const CARPETA_RAIZ_ID = '1pqMjUjZ-K4Bo3lC-kSYDaGjAUxQSaRrN';
 const SPREADSHEET_DESTINO_ID = '1OQ-BGFqYxEqy1UR6YkREXnVqwaNiFmLVEWW_Q_SB50k';
 
 /**
- * 1. Crea el menú "Club online" al abrir la hoja de cálculo unificando todas las opciones.
+ * 1. Crea el menú "Club online" al abrir la hoja de cálculo.
  */
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
@@ -16,33 +16,24 @@ function onOpen() {
     .addToUi();
 }
 
-/**
- * 2. Función para procesar y actualizar la hoja de Socios.
- */
 function actualizarSocios() {
   const nombreCarpeta = "Socios";
   const nombreHojaDestino = "Socios";
   const columnasAMantener = [1, 2, 3, 4, 9, 11, 16, 22, 28, 29];
   const filaInicioOriginal = 6; 
-
   procesarUltimoArchivo(nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener);
 }
 
-/**
- * 3. Función para procesar y actualizar la hoja de Antigüedad de Deuda.
- */
 function actualizarAntiguedadDeuda() {
   const nombreCarpeta = "AntiguedaddeDeuda";
   const nombreHojaDestino = "AntiguedaddeDeuda";
   const columnasAMantener = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
   const filaInicioOriginal = 5; 
-
   procesarUltimoArchivo(nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener);
 }
 
 /**
- * Función auxiliar encargada de buscar el último archivo Excel (.xls o .xlsx), 
- * extraer sus datos aplicando los filtros de filas/columnas y pegarlos en el destino.
+ * Función auxiliar encargada de buscar el último archivo Excel, filtrar y pegar en destino.
  */
 function procesarUltimoArchivo(nombreSubcarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener) {
   const carpetaRaiz = DriveApp.getFolderById(CARPETA_RAIZ_ID);
@@ -77,20 +68,15 @@ function procesarUltimoArchivo(nombreSubcarpeta, nombreHojaDestino, filaInicioOr
   
   let tempSpreadsheet = null;
   try {
-    const fileId = ultimoArchivo.getId();
     const blob = ultimoArchivo.getBlob();
-    const config = {
-      title: ultimoArchivo.getName() + '_temp',
-      mimeType: MimeType.GOOGLE_SHEETS
-    };
-    
+    const config = { title: ultimoArchivo.getName() + '_temp', mimeType: MimeType.GOOGLE_SHEETS };
     const tempFile = Drive.Files.create(config, blob);
     tempSpreadsheet = SpreadsheetApp.openById(tempFile.id);
     const hojaOrigen = tempSpreadsheet.getSheets()[0];
     const datosOrigen = hojaOrigen.getDataRange().getValues();
     
     if (datosOrigen.length < filaInicioOriginal) {
-      SpreadsheetApp.getUi().alert('El archivo no contiene suficientes filas según las especificaciones.');
+      SpreadsheetApp.getUi().alert('El archivo no contiene suficientes filas.');
       eliminarArchivoTemporal(tempFile.id);
       return;
     }
@@ -99,20 +85,15 @@ function procesarUltimoArchivo(nombreSubcarpeta, nombreHojaDestino, filaInicioOr
     for (let i = filaInicioOriginal - 1; i < datosOrigen.length; i++) {
       const filaOriginal = datosOrigen[i];
       const nuevaFila = [];
-      
       columnasAMantener.forEach(idx => {
         nuevaFila.push(filaOriginal[idx - 1] !== undefined ? filaOriginal[idx - 1] : "");
       });
-      
       matrizFiltrada.push(nuevaFila);
     }
     
     const ssDestino = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
     let hojaDestino = ssDestino.getSheetByName(nombreHojaDestino);
-    
-    if (!hojaDestino) {
-      hojaDestino = ssDestino.insertSheet(nombreHojaDestino);
-    }
+    if (!hojaDestino) hojaDestino = ssDestino.insertSheet(nombreHojaDestino);
     
     hojaDestino.clearContents();
     hojaDestino.clearFormats();
@@ -120,29 +101,23 @@ function procesarUltimoArchivo(nombreSubcarpeta, nombreHojaDestino, filaInicioOr
     if (matrizFiltrada.length > 0) {
       hojaDestino.getRange(1, 1, matrizFiltrada.length, matrizFiltrada[0].length).setValues(matrizFiltrada);
     }
-    
     eliminarArchivoTemporal(tempFile.id);
     SpreadsheetApp.getUi().alert('¡Éxito!: Hoja de "' + nombreHojaDestino + '" actualizada correctamente.');
-    
   } catch (error) {
-    if (tempSpreadsheet) {
-      eliminarArchivoTemporal(tempSpreadsheet.getId());
-    }
+    if (tempSpreadsheet) eliminarArchivoTemporal(tempSpreadsheet.getId());
     SpreadsheetApp.getUi().alert('Ocurrió un error al procesar el archivo: ' + error.message);
   }
 }
 
 function eliminarArchivoTemporal(id) {
-  try {
-    Drive.Files.remove(id);
-  } catch(e) {
+  try { Drive.Files.remove(id); } catch(e) {
     try { DriveApp.getFileById(id).setTrashed(true); } catch(err) {}
   }
 }
 
-// =================================================
-// FUNCIONES DE COMUNICACIÓN PARA LA WEB APP MÓVIL
-// =================================================
+// ==========================================
+// CONTROLADOR DE LA WEB APP MÓVIL
+// ==========================================
 
 function doGet() {
   return HtmlService.createTemplateFromFile('Index')
@@ -152,7 +127,7 @@ function doGet() {
 }
 
 /**
- * Obtiene las divisiones directamente desde la hoja limpia "Divisiones"
+ * Obtiene las categorías de selección desde la hoja oficial "Divisiones"
  */
 function obtenerDivisiones() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
@@ -161,9 +136,8 @@ function obtenerDivisiones() {
   
   const datos = hoja.getDataRange().getValues();
   let divisiones = [];
-  
   for (let i = 1; i < datos.length; i++) {
-    let div = datos[i][0]; // Columna A
+    let div = datos[i][0];
     if (div && divisiones.indexOf(div.trim()) === -1) {
       divisiones.push(div.trim());
     }
@@ -172,81 +146,88 @@ function obtenerDivisiones() {
 }
 
 /**
- * DETECTOR DETALLADO: Escanea toda la fila para encontrar la división del jugador, 
- * solucionando desajustes en tablas dinámicas o corrimiento de celdas.
+ * NUEVA LÓGICA ESTRUCTURAL CRUCIAL:
+ * Selecciona los jugadores desde la hoja 'Socios' filtrados por su división,
+ * y luego busca su estado de deuda real usando su N° de Socio único.
+ */
+/**
+ * REESTRUCTURADO: Lee el padrón de la hoja Socios por categoría,
+ * y extrae los saldos reales desde las columnas exactas de la hoja 'Reporte'.
  */
 function obtenerDeudasPorDivision(divisionBuscada) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
-  const hojaDeuda = ss.getSheetByName('AntiguedaddeDeuda');
-  if (!hojaDeuda) return [];
+  const hojaSocios = ss.getSheetByName('Socios');
+  const hojaReporte = ss.getSheetByName('Reporte'); // <-- Cambiado a la hoja consolidada plana
   
-  const datosDeuda = hojaDeuda.getDataRange().getValues();
-  let resultados = [];
+  if (!hojaSocios || !hojaReporte) return [];
+  
+  const datosSocios = hojaSocios.getDataRange().getValues();
+  const datosReporte = hojaReporte.getDataRange().getValues();
   
   if (!divisionBuscada) return [];
   
-  // Extraemos componentes numéricos clave (ej: "2010" o "17") para mapeo tolerante
-  let buscarLimpio = divisionBuscada.toLowerCase().replace(/[^a-z0-9]/g, "");
-  let numeroBuscado = divisionBuscada.match(/\d+/);
-  let strNumero = numeroBuscado ? numeroBuscado[0] : null;
-
-  // Analizar los encabezados (Fila 1) para ubicar las columnas clave por texto
-  let encabezados = datosDeuda[0].map(e => e.toString().toLowerCase());
-  let idxNombre = encabezados.findIndex(e => e.includes("nombre") || e.includes("completo"));
-  let idxTotal = encabezados.findIndex(e => e.includes("total") || e.includes("informar"));
+  // 1. Mapear los saldos de la hoja Reporte extrayendo el N° de Socio del texto de la columna T
+  let mapaDeudas = {};
+  for (let k = 1; k < datosReporte.length; k++) {
+    let filaR = datosReporte[k];
+    let nombreCeldaT = filaR[19] ? filaR[19].toString().trim() : ""; // Columna T
+    
+    if (nombreCeldaT !== "") {
+      // Expresión regular para capturar el número de socio entre paréntesis, ej: (1620-0)
+      let coincidenciaId = nombreCeldaT.match(/\(([^)]+)\)/);
+      if (coincidenciasId && coincidenciaId[1]) {
+        let idSocioExtraido = coincidenciaId[1].trim();
+        
+        mapaDeudas[idSocioExtraido] = {
+          total: parseFloat(filaR[20]) || 0, // Columna U (INFORMAR TOTAL)
+          mes1: parseFloat(filaR[12]) || 0,  // Columna M (Abr-26)
+          mes2: parseFloat(filaR[13]) || 0,  // Columna N (Mar-26)
+          mes3: parseFloat(filaR[14]) || 0   // Columna O (Feb-26)
+        };
+      }
+    }
+  }
   
-  // Si no se encuentran por nombre, volvemos a los índices por defecto estables (Col B y Col C)
-  if (idxNombre === -1) idxNombre = 1;
-  if (idxTotal === -1) idxTotal = 2;
+  let resultados = [];
+  let buscarLimpio = divisionBuscada.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-  // Recorremos las filas buscando coincidencias
-  for (let i = 1; i < datosDeuda.length; i++) {
-    let fila = datosDeuda[i];
-    if (!fila || fila.length === 0) continue;
+  // 2. Buscar los jugadores en la hoja 'Socios' que correspondan a la categoría elegida
+  for (let i = 1; i < datosSocios.length; i++) {
+    let filaS = datosSocios[i];
+    if (!filaS || filaS[0] === undefined || filaS[0] === null) continue;
     
-    // Convertimos toda la fila a texto plano continuo para analizar si la categoría está en celdas grises o movidas
-    let filaTextoCompleto = fila.join(" ").toLowerCase();
+    // Columna D del padrón procesado (Categoría)
+    let divisionJugadorLimpia = filaS[3] ? filaS[3].toString().toLowerCase().replace(/[^a-z0-9]/g, "") : "";
     
-    // Filtro de exclusión para totales generales
-    if (filaTextoCompleto.includes("total general")) continue;
-    
-    let filaLimpia = filaTextoCompleto.replace(/[^a-z0-9]/g, "");
-    
-    // VALIDACIÓN DINÁMICA: Verifica si la categoría seleccionada por el técnico existe dentro de la fila actual
-    let coincideTexto = filaLimpia.includes(buscarLimpio);
-    let coincideNumero = strNumero && filaTextoCompleto.includes(strNumero);
-    
-    // Si la fila pertenece a la división buscada, extraemos al jugador
-    if (coincideTexto || (divisionBuscada.toLowerCase().includes("sub") && coincideNumero)) {
+    if (divisionJugadorLimpia !== "" && divisionJugadorLimpia.includes(buscarLimpio)) {
+      let idSocio = filaS[0].toString().trim(); // Columna A (N° Socio)
+      let apellido = filaS[1] ? filaS[1].toString().trim() : "";
+      let nombre = filaS[2] ? filaS[2].toString().trim() : "";
+      let nombreCompletoConId = `${apellido}, ${nombre} (${idSocio})`;
       
-      let nombre = fila[idxNombre] ? fila[idxNombre].toString().trim() : "";
-      
-      // Si la celda del nombre es igual a la división (caso de fila de separación), saltamos la línea
-      if (!nombre || nombre.toLowerCase().includes("fútbol") || nombre.toLowerCase().includes("divisiones") || nombre.toLowerCase().includes("total")) continue;
-      
-      let totalDeuda = parseFloat(fila[idxTotal]) || 0;
-      let mes1 = parseFloat(fila[3]) || 0; // Columna D
-      let mes2 = parseFloat(fila[4]) || 0; // Columna E
-      let mes3 = parseFloat(fila[5]) || 0; // Columna F
+      // Vincular el jugador con su estado financiero en el reporte consolidado
+      let deudaAsignada = mapaDeudas[idSocio] || { total: 0, mes1: 0, mes2: 0, mes3: 0 };
       
       let mesesConDeuda = 0;
-      if (mes1 > 0) mesesConDeuda++;
-      if (mes2 > 0) mesesConDeuda++;
-      if (mes3 > 0) mesesConDeuda++;
+      if (deudaAsignada.mes1 > 0) mesesConDeuda++;
+      if (deudaAsignada.mes2 > 0) mesesConDeuda++;
+      if (deudaAsignada.mes3 > 0) mesesConDeuda++;
       
       let alertaCritica = (mesesConDeuda >= 2);
       
       resultados.push({
-        nombre: nombre, 
-        total: totalDeuda,
-        mes1: mes1, 
-        mes2: mes2, 
-        mes3: mes3,
+        nombre: nombreCompletoConId,
+        total: deudaAsignada.total,
+        mes1: deudaAsignada.mes1,
+        mes2: deudaAsignada.mes2,
+        mes3: deudaAsignada.mes3,
         alerta: alertaCritica
       });
     }
   }
-  return resultados;
+  
+  // Orden alfabético consecuente por Apellido
+  return resultados.sort((a, b) => a.nombre.localeCompare(b.nombre));
 }
 
 function ejecutarEnvioMailsUI() {
@@ -266,36 +247,26 @@ function enviarMailsDeudores() {
   
   let directorioSocios = {};
   for (let j = 1; j < datosSocios.length; j++) {
-    let apellido = datosSocios[j][1]; // Columna B
-    let nombre = datosSocios[j][2];   // Columna C
-    let email = datosSocios[j][5];    // Columna F
-    if (apellido && nombre && email) {
-      let llave = (nombre.trim() + " " + apellido.trim()).toLowerCase();
-      directorioSocios[llave] = email.trim();
+    let idSocio = datosSocios[j][0] ? datosSocios[j][0].toString().trim() : "";
+    let email = datosSocios[j][5]; // Columna F (Correo Electrónico)
+    if (idSocio && email) {
+      directorioSocios[idSocio] = email.trim();
     }
   }
   
   let correosEnviados = 0;
   for (let i = 1; i < datosDeuda.length; i++) {
     let fila = datosDeuda[i];
-    let nombreCompletoOriginal = fila[1]; 
-    let deudaMesActual = parseFloat(fila[3]) || 0; 
+    let idSocioDeuda = fila[0] ? fila[0].toString().trim() : ""; // Columna A (N° Socio)
+    let nombreJugador = fila[1]; // Columna B
+    let deudaMesActual = parseFloat(fila[3]) || 0; // Columna D
     
-    if (nombreCompletoOriginal && deudaMesActual > 0) {
-      let llaveBusqueda = nombreCompletoOriginal.trim().toLowerCase();
-      let emailDestino = directorioSocios[llaveBusqueda];
-      
-      if (!emailDestino) {
-        let partes = llaveBusqueda.split(" ");
-        if (partes.length >= 2) {
-          let llaveInvertida = partes.slice(1).join(" ") + " " + partes[0];
-          emailDestino = directorioSocios[llaveInvertida];
-        }
-      }
+    if (idSocioDeuda && deudaMesActual > 0 && !idSocioDeuda.toLowerCase().includes("total")) {
+      let emailDestino = directorioSocios[idSocioDeuda];
       
       if (emailDestino && emailDestino.includes("@")) {
         let asunto = "Aviso Importante: Regularización de Cuota - Club Online";
-        let cuerpo = `Estimado/a ${nombreCompletoOriginal},\n\nLe comunicamos que registra un saldo pendiente en su cuota social por un importe de $${deudaMesActual}.\n\nSolicitamos tenga a bien acercarse a la tesorería del club para regularizar su situación.\n\nAtentamente,\nDepto. de Tesorería - Club Online.`;
+        let cuerpo = `Estimado/a ${nombreJugador},\n\nLe comunicamos que registra un saldo pendiente en su cuota social por un importe de $${deudaMesActual}.\n\nSolicitamos tenga a bien acercarse a la tesorería del club para regularizar su situación.\n\nAtentamente,\nDepto. de Tesorería - Club Online.`;
         MailApp.sendEmail(emailDestino, asunto, cuerpo);
         correosEnviados++;
       }
