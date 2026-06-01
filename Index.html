@@ -16,7 +16,7 @@
   <body>
 
     <div class="header-club">
-      <h3 class="fw-bold m-0">⚽ SPF GONNET⚽</h3>
+      <h3 class="fw-bold m-0">⚽ SPF GONNET ⚽</h3>
       <small style="opacity: 0.85;">Panel de Control de Deudas para DT</small>
     </div>
 
@@ -98,11 +98,14 @@
         contenedor.innerHTML = '';
         loader.style.display = 'block';
         
-        google.script.run.withSuccessHandler(function(jugadores) {
+        google.script.run.withSuccessHandler(function(objetoContenedor) {
           loader.style.display = 'none';
           
+          let meses = objetoContenedor.nombresMeses;
+          let jugadores = objetoContenedor.listaJugadores;
+          
           if(jugadores.length === 0) {
-            contenedor.innerHTML = '<div class="alert alert-light text-center shadow-sm">No se registran jugadores cargados en esta categoría.</div>';
+            contenedor.innerHTML = '<div class="alert alert-light text-center shadow-sm">No se registran jugadores con deudas activas en esta categoría.</div>';
             return;
           }
           
@@ -112,18 +115,43 @@
             let divTarjeta = document.createElement('div');
             divTarjeta.className = 'tarjeta-jugador' + (j.alerta ? ' tarjeta-alerta' : '');
             
+            let bloqueDescuento = "";
+            if (j.descuento || j.periodoDesc) {
+              bloqueDescuento = `<div class="mt-1 text-primary small">🎁 <strong>Bonificación:</strong> ${j.descuento} ${j.periodoDesc}</div>`;
+            }
+
+            // REQUERIMIENTO 5: Construir dinámicamente el bloque de cuadrículas para los 7 campos (M a S)
+            let bloquesMesesHTML = "";
+            for (let i = 0; i < meses.length; i++) {
+              let montoMes = j.valoresMeses[i];
+              // Si el mes tiene deuda, le aplicamos la clase de color rojo
+              let claseColor = montoMes > 0 ? 'monto-deuda' : '';
+              
+              bloquesMesesHTML += `
+                <div class="col-4 col-sm-3 mb-1">
+                  <span class="text-muted" style="font-size: 0.75rem;">${meses[i]}</span><br>
+                  <span class="${claseColor}" style="font-size: 0.85rem; font-weight: 500;">${formateador.format(montoMes)}</span>
+                </div>`;
+            }
+
+            // REQUERIMIENTO 3: Modificación del icono y texto de morosidad a "Debe mas de 2 meses"
             divTarjeta.innerHTML = `
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="fw-bold text-dark" style="font-size: 1.05rem;">${j.nombre}</span>
-                ${j.alerta ? '<span class="badge-critico">🔴 Alerta: +2 Meses</span>' : '<span class="badge bg-light text-success fw-bold border">✓ Al día</span>'}
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <span class="fw-bold text-dark" style="font-size: 1.1rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
+                ${j.alerta ? '<span class="badge-critico">🔴 Debe mas de 2 meses</span>' : '<span class="badge bg-light text-success fw-bold border">✓ Regular</span>'}
               </div>
-              <div class="row g-2 text-muted small border-top pt-2 mt-1">
-                <div class="col-4">Mes Act: <br><span class="${j.mes1 > 0 ? 'monto-deuda' : ''}">${formateador.format(j.mes1)}</span></div>
-                <div class="col-4">Mes -1: <br><span class="${j.mes2 > 0 ? 'monto-deuda' : ''}">${formateador.format(j.mes2)}</span></div>
-                <div class="col-4">Mes -2: <br><span class="${j.mes3 > 0 ? 'monto-deuda' : ''}">${formateador.format(j.mes3)}</span></div>
-                <div class="col-12 text-end fw-bold text-dark border-top pt-2 mt-2" style="font-size: 0.95rem;">
-                  Total Deuda: <span class="text-primary">${formateador.format(j.total)}</span>
-                </div>
+              
+              <div class="row g-1 border-top pt-2 mt-1 text-start">
+                ${bloquesMesesHTML}
+              </div>
+
+              <div class="border-top pt-2 mt-2 small text-secondary">
+                <div><strong>Forma de Pago:</strong> ${j.formaPago}</div>
+                ${bloqueDescuento}
+              </div>
+
+              <div class="text-end fw-bold text-dark border-top pt-2 mt-2" style="font-size: 1.1rem;">
+                Total a Cobrar: <span class="monto-deuda">${formateador.format(j.total)}</span>
               </div>
             `;
             contenedor.appendChild(divTarjeta);

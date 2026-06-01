@@ -121,7 +121,7 @@ function eliminarArchivoTemporal(id) {
 function doGet() {
   return HtmlService.createTemplateFromFile('Index')
       .evaluate()
-      .setTitle('Consulta de Deudas - Club Online')
+      .setTitle('Consulta de Deudas - Club SFP GONNET')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
 }
 
@@ -152,60 +152,97 @@ function obtenerDivisiones() {
  * NUEVA VERSIÓN DIRECTA: Extrae y ordena la información basándose 
  * exclusivamente en las columnas de la hoja 'Reporte'.
  */
+/**
+ * EXTRAE Y MAPEA: Trae la información financiera basándose en la hoja 'Reporte'
+ * e incluye dinámicamente los encabezados de los meses para evitar el error NaN.
+ */
+/**
+ * MODIFICADO: Extrae solo jugadores con deuda > 0, mapea los 7 meses de M a S,
+ * aplica el cálculo de morosidad flexible y simplifica las formas de pago.
+ */
 function obtenerDeudasPorDivision(divisionBuscada) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
   const hojaReporte = ss.getSheetByName('Reporte');
-  if (!hojaReporte) return [];
+  if (!hojaReporte) return { nombresMeses: [], listaJugadores: [] };
   
   const datosReporte = hojaReporte.getDataRange().getValues();
-  let resultados = [];
   
-  if (!divisionBuscada) return [];
+  // Extraer las etiquetas dinámicas de los 7 campos (Columnas M a S)
+  let nombresMeses = [];
+  for (let col = 12; col <= 18; col++) { // Índices 12 (M) al 18 (S)
+    let nombreHeader = datosReporte[0][col] ? datosReporte[0][col].toString().trim() : "Mes";
+    nombresMeses.push(nombreHeader);
+  }
+
+  let listaJugadores = [];
+  if (!divisionBuscada) return { nombresMeses: nombresMeses, listaJugadores: [] };
+  
   let buscarLimpio = divisionBuscada.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-  // Recorremos la hoja Reporte desde la fila 2 (índice 1) para omitir encabezados
+  // Recorremos la hoja desde la fila 2 para extraer los registros
   for (let k = 1; k < datosReporte.length; k++) {
     let filaR = datosReporte[k];
-    if (!filaR || filaR[7] === undefined) continue; // Salta si la fila está vacía
+    if (!filaR || filaR[7] === undefined) continue; // Columna H (Divisiones)
     
-    // Columna H: Divisiones
     let divisionFilaLimpia = filaR[7].toString().toLowerCase().replace(/[^a-z0-9]/g, "");
     
-    // Si la fila pertenece a la división seleccionada
     if (divisionFilaLimpia !== "" && divisionFilaLimpia.includes(buscarLimpio)) {
       
+      // REQUERIMIENTO 1: Solo procesar y mostrar jugadores con deuda total mayor a 0 (Columna U)
+      let totalDeuda = parseFloat(filaR[20]) || 0; 
+      if (totalDeuda <= 0) continue; 
+      
       let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre"; // Columna T
-      let formaPago = filaR[6] ? filaR[6].toString().trim() : "-";          // Columna G
-      let division = filaR[7] ? filaR[7].toString().trim() : "-";           // Columna H
-      let descuento = filaR[8] ? filaR[8].toString().trim() : "";           // Columna I
-      let periodoDesc = filaR[9] ? filaR[9].toString().trim() : "";         // Columna J
-      let totalDeuda = parseFloat(filaR[20]) || 0;                          // Columna U
       
-      // Control de Alerta: Verifica si tiene números distintos a 0 en M (Abr-26) y N (Mar-26)
-      let mesM = parseFloat(filaR[12]) || 0; 
-      let mesN = parseFloat(filaR[13]) || 0;
-      let alertaCritica = (mesM > 0 && mesN > 0); 
+      // REQUERIMIENTO 2: Reemplazo y simplificación de las Formas de Pago (Columna G)
+      let formaPagoRaw = filaR[6] ? filaR[6].toString().trim() : "-";
+      let formaPago = formaPagoRaw;
+      if (formaPagoRaw.includes("Entidad de Recaudación | Pagos Virtuales del Sur")) {
+        formaPago = "Debito Automatico";
+      } else if (formaPagoRaw.includes("Administración/Secretaría")) {
+        formaPago = "Tesoreria";
+      }
       
-      resultados.push({
+      let descuento = filaR[8] ? filaR[8].toString().trim() : "";     // Columna I
+      let periodoDesc = filaR[9] ? filaR[9].toString().trim() : "";   // Columna J
+      
+      // REQUERIMIENTO 5: Capturar los valores de los 7 campos (Columnas M a S)
+      let valoresMeses = [];
+      let mesesConDeudaActiva = 0;
+      
+      for (let col = 12; col <= 18; col++) {
+        let valorCelda = parseFloat(filaR[col]) || 0;
+        valoresMeses.push(valorCelda);
+        
+        // Si el jugador registra deuda activa en este mes, lo contabilizamos
+        if (valorCelda > 0) {
+          mesesConDeudaActiva++;
+        }
+      }
+      
+      // REQUERIMIENTO 4: Alerta si el jugador debe más de 2 meses en total (sin importar cuáles)
+      let alertaCritica = (mesesConDeudaActiva > 2);
+      
+      listaJugadores.push({
         nombre: nombre,
         formaPago: formaPago,
-        division: division,
         descuento: descuento,
         periodoDesc: periodoDesc,
         total: totalDeuda,
+        valoresMeses: valoresMeses, // Enviamos el array con los 7 montos
         alerta: alertaCritica
       });
     }
   }
   
-  // ORDENAR: En función de quién debe más (Monto Total de mayor a menor)
-  return resultados.sort((a, b) => b.total - a.total);
+  // Ordenar de mayor a menor monto de deuda acumulada
+  listaJugadores.sort((a, b) => b.total - a.total);
+  
+  return {
+    nombresMeses: nombresMeses,
+    listaJugadores: listaJugadores
+  };
 }
-function ejecutarEnvioMailsUI() {
-  const respuesta = enviarMailsDeudores();
-  SpreadsheetApp.getUi().alert(respuesta);
-}
-
 function enviarMailsDeudores() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
   const hojaDeuda = ss.getSheetByName('AntiguedaddeDeuda');
@@ -234,8 +271,8 @@ function enviarMailsDeudores() {
     if (idSocioDeuda && deudaMesActual > 0 && !idSocioDeuda.toLowerCase().includes("total")) {
       let emailDestino = directorioSocios[idSocioDeuda];
       if (emailDestino && emailDestino.includes("@")) {
-        let asunto = "Aviso Importante: Regularización de Cuota - Club Online";
-        let cuerpo = `Estimado/a ${nombreJugador},\n\nLe comunicamos que registra un saldo pendiente en su cuota social por un importe de $${deudaMesActual}.\n\nSolicitamos tenga a bien acercarse a la tesorería del club para regularizar su situación.\n\nAtentamente,\nDepto. de Tesorería - Club Online.`;
+        let asunto = "Aviso Importante: Regularización de Cuota - Club SFP Gonnet";
+        let cuerpo = `Estimado/a ${nombreJugador},\n\nLe comunicamos que registra un saldo pendiente en su cuota social por un importe de $${deudaMesActual}.\n\nSolicitamos tenga a bien acercarse o escribir a la tesorería del club 2216819698 para regularizar su situación.\n\nAtentamente,\nDepto. de Tesorería - Club SFP Gonnet.`;
         MailApp.sendEmail(emailDestino, asunto, cuerpo);
         correosEnviados++;
       }
