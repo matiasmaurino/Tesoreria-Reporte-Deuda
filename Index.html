@@ -4,40 +4,145 @@
     <base target="_top">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-      body { background-color: #f4f6f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-      .header-club { background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%); color: white; padding: 25px 15px; border-bottom-left-radius: 25px; border-bottom-right-radius: 25px; text-align: center; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-      .tarjeta-jugador { background: white; border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 3px 6px rgba(0,0,0,0.04); border-left: 6px solid #adb5bd; transition: transform 0.2s; }
-      .tarjeta-alerta { border-left: 6px solid #dc3545; background-color: #fff8f8; }
-      .badge-critico { background-color: #dc3545; color: white; font-size: 0.75rem; padding: 5px 9px; border-radius: 8px; font-weight: bold; }
-      .monto-deuda { color: #dc3545; font-weight: 600; }
-      .loader { display: none; text-align: center; margin: 40px 0; }
+      body { 
+        background-color: #f8f9fa; 
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+        margin: 0;
+        padding: 0;
+      }
+      
+      /* CONTENEDOR FIJO: Anclaje superior para buscador y logo */
+      .contenedor-fijo {
+        position: -webkit-sticky;
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        background-color: #f8f9fa;
+        padding-bottom: 8px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+      }
+
+      /* CABECERA ESTILO CLUB: Combinación institucional Negro y Oro */
+      .header-club { 
+        background: linear-gradient(135deg, #111111 0%, #222222 100%); 
+        color: #ffffff; 
+        padding: 20px 15px; 
+        border-bottom-left-radius: 25px; 
+        border-bottom-right-radius: 25px; 
+        text-align: center; 
+        position: relative;
+        border-bottom: 4px solid #fecb00; /* Línea dorada distintiva del escudo */
+      }
+
+      /* Contenedor del escudo oficial */
+      .logo-club {
+        max-width: 65px;
+        height: auto;
+        margin-bottom: 8px;
+        filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));
+      }
+
+      .titulo-panel {
+        font-size: 1.15rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        color: #fecb00; /* Texto dorado/oro */
+        margin: 0;
+        text-transform: uppercase;
+      }
+
+      /* TARJETAS DE JUGADORES OPTIMIZADAS */
+      .tarjeta-jugador { 
+        background: white; 
+        border-radius: 14px; 
+        padding: 16px; 
+        margin-bottom: 14px; 
+        box-shadow: 0 3px 8px rgba(0,0,0,0.03); 
+        border-left: 6px solid #6c757d; 
+        transition: transform 0.2s; 
+      }
+      
+      /* Alerta crítica de morosidad con rojo institucional */
+      .tarjeta-alerta { 
+        border-left: 6px solid #dc3545; 
+        background-color: #fffafb; 
+      }
+      
+      .badge-critico { 
+        background-color: #dc3545; 
+        color: white; 
+        font-size: 0.75rem; 
+        padding: 6px 10px; 
+        border-radius: 8px; 
+        font-weight: bold; 
+        text-transform: uppercase;
+      }
+
+      .badge-regular {
+        background-color: #e8f5e9;
+        color: #2e7d32;
+        font-size: 0.75rem;
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-weight: bold;
+        border: 1px solid #c8e6c9;
+        text-transform: uppercase;
+      }
+
+      .monto-deuda { 
+        color: #dc3545; 
+        font-weight: 700; 
+      }
+      
+      .loader { 
+        text-align: center; 
+        margin: 40px 0; 
+      }
+      
+      .zona-scroll {
+        padding-top: 15px;
+      }
+
+      /* Customizaciones de campos de selección estilo Premium */
+      .form-select-lg, .form-control-lg {
+        font-size: 1rem;
+        border-radius: 10px;
+        border: 1px solid #ced4da;
+      }
+
+      .form-select-lg:focus, .form-control-lg:focus {
+        border-color: #fecb00;
+        box-shadow: 0 0 0 0.25rem rgba(254, 203, 0, 0.25);
+      }
     </style>
   </head>
   <body>
 
-    <div class="header-club">
-      <h3 class="fw-bold m-0">⚽ SPF GONNET ⚽</h3>
-      <small style="opacity: 0.85;">Panel de Control de Deudas para DT</small>
-    </div>
-
-    <div class="container text-start">
-      <div class="bg-white p-3 rounded-3 shadow-sm mb-4">
-        
-        <div class="mb-3">
-          <label for="buscarDivision" class="form-label fw-bold text-secondary">🔍 Escribe para buscar división:</label>
-          <input type="text" id="buscarDivision" class="form-control form-control-lg" placeholder="Ej: Senior, 2010, Femenino..." oninput="filtrarDivisiones()">
-        </div>
-
-        <div>
-          <label for="selectDivision" class="form-label fw-bold text-secondary">📋 Selecciona la opción filtrada:</label>
-          <select id="selectDivision" class="form-select form-select-lg" onchange="cargarDeudas()">
-            <option value="">Cargando listado...</option>
-          </select>
-        </div>
-
+    <div class="contenedor-fijo">
+      <div class="header-club">
+        <img src="https://sfpgonnet.com.ar/imagenes/logo1.png" alt="Escudo S.F.P. Gonnet" class="logo-club">
+        <h2 class="titulo-panel">Reporte Deudas Cuotas de jugadores</h2>
       </div>
 
-      <div id="loader" class="loader">
+      <div class="container mt-3">
+        <div class="bg-white p-3 rounded-3 shadow-sm mb-1">
+          <div class="mb-3">
+            <label for="buscarDivision" class="form-label fw-bold text-secondary" style="font-size: 0.9rem;">🔍 Escribe para buscar división:</label>
+            <input type="text" id="buscarDivision" class="form-control form-control-lg" placeholder="Ej: Senior, 2010, Femenino..." oninput="filtrarDivisiones()">
+          </div>
+
+          <div>
+            <label for="selectDivision" class="form-label fw-bold text-secondary" style="font-size: 0.9rem;">📋 Selecciona la opción filtrada:</label>
+            <select id="selectDivision" class="form-select form-select-lg" onchange="cargarDeudas()">
+              <option value="">Cargando listado...</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container zona-scroll">
+      <div id="loader" class="loader" style="display: none;">
         <div class="spinner-border text-dark" role="status"></div>
         <div class="mt-2 text-muted small">Buscando jugadores en la base de datos...</div>
       </div>
@@ -46,7 +151,6 @@
     </div>
 
     <script>
-      // Variable global para almacenar todas las divisiones originales cargadas desde la hoja
       let todasLasDivisiones = [];
 
       window.onload = function() {
@@ -56,7 +160,6 @@
         }).obtenerDivisiones();
       };
 
-      // Función encargada de llenar el select con las opciones que correspondan
       function renderizarOpciones(lista) {
         let select = document.getElementById('selectDivision');
         select.innerHTML = '<option value="">-- Elige una División (' + lista.length + ') --</option>';
@@ -69,15 +172,11 @@
         });
       }
 
-      // Función que filtra las opciones del desplegable en tiempo real a medida que escribes
       function filtrarDivisiones() {
         let textoBuscado = document.getElementById('buscarDivision').value.toLowerCase().trim();
         let contenedor = document.getElementById('contenedorTarjetas');
-        
-        // Limpiar tarjetas de jugadores si el técnico decide refiltrar la lista
         contenedor.innerHTML = '';
         
-        // Filtrar el array global reteniendo solo las coincidencias
         let divisionesFiltradas = todasLasDivisiones.filter(function(div) {
           return div.toLowerCase().includes(textoBuscado);
         });
@@ -105,7 +204,7 @@
           let jugadores = objetoContenedor.listaJugadores;
           
           if(jugadores.length === 0) {
-            contenedor.innerHTML = '<div class="alert alert-light text-center shadow-sm">No se registran jugadores con deudas activas en esta categoría.</div>';
+            contenedor.innerHTML = '<div class="alert alert-light text-center shadow-sm text-muted">No se registran jugadores con deudas activas en esta categoría.</div>';
             return;
           }
           
@@ -117,40 +216,37 @@
             
             let bloqueDescuento = "";
             if (j.descuento || j.periodoDesc) {
-              bloqueDescuento = `<div class="mt-1 text-primary small">🎁 <strong>Bonificación:</strong> ${j.descuento} ${j.periodoDesc}</div>`;
+              bloqueDescuento = `<div class="mt-1 text-dark small" style="font-size: 0.8rem;">🎁 <strong>Bonificación:</strong> ${j.descuento} ${j.periodoDesc}</div>`;
             }
 
-            // REQUERIMIENTO 5: Construir dinámicamente el bloque de cuadrículas para los 7 campos (M a S)
             let bloquesMesesHTML = "";
             for (let i = 0; i < meses.length; i++) {
               let montoMes = j.valoresMeses[i];
-              // Si el mes tiene deuda, le aplicamos la clase de color rojo
-              let claseColor = montoMes > 0 ? 'monto-deuda' : '';
+              let claseColor = montoMes > 0 ? 'monto-deuda' : 'text-success';
               
               bloquesMesesHTML += `
                 <div class="col-4 col-sm-3 mb-1">
-                  <span class="text-muted" style="font-size: 0.75rem;">${meses[i]}</span><br>
-                  <span class="${claseColor}" style="font-size: 0.85rem; font-weight: 500;">${formateador.format(montoMes)}</span>
+                  <span class="text-muted" style="font-size: 0.72rem;">${meses[i]}</span><br>
+                  <span class="${claseColor}" style="font-size: 0.82rem; font-weight: 600;">${formateador.format(montoMes)}</span>
                 </div>`;
             }
 
-            // REQUERIMIENTO 3: Modificación del icono y texto de morosidad a "Debe mas de 2 meses"
             divTarjeta.innerHTML = `
-              <div class="d-flex justify-content-between align-items-start mb-2">
-                <span class="fw-bold text-dark" style="font-size: 1.1rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
-                ${j.alerta ? '<span class="badge-critico">🔴 Debe mas de 2 meses</span>' : '<span class="badge bg-light text-success fw-bold border">✓ Regular</span>'}
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-dark" style="font-size: 1.05rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
+                ${j.alerta ? '<span class="badge-critico">🔴 Debe más de 2 meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
               </div>
               
               <div class="row g-1 border-top pt-2 mt-1 text-start">
                 ${bloquesMesesHTML}
               </div>
 
-              <div class="border-top pt-2 mt-2 small text-secondary">
+              <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem;">
                 <div><strong>Forma de Pago:</strong> ${j.formaPago}</div>
                 ${bloqueDescuento}
               </div>
 
-              <div class="text-end fw-bold text-dark border-top pt-2 mt-2" style="font-size: 1.1rem;">
+              <div class="text-end fw-bold text-dark border-top pt-2 mt-2" style="font-size: 1.05rem;">
                 Total a Cobrar: <span class="monto-deuda">${formateador.format(j.total)}</span>
               </div>
             `;
