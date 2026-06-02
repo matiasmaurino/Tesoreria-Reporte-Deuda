@@ -12,7 +12,7 @@ function onOpen() {
     .addItem('Actualizar Socios 👥', 'actualizarSocios')
     .addItem('Antigüedad de Deuda 📊', 'actualizarAntiguedadDeuda')
     .addSeparator()
-    .addItem('Enviar Mails a Deudores ✉️', 'ejecutarEnvioMailsUI')
+    .addItem('Enviar Mails a Deudores ✉️', 'enviarMailsDeudores') // <-- Modificado aquí
     .addToUi();
 }
 
@@ -247,11 +247,12 @@ function enviarMailsDeudores() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
   const hojaDeuda = ss.getSheetByName('AntiguedaddeDeuda');
   const hojaSocios = ss.getSheetByName('Socios');
-  
   if (!hojaDeuda || !hojaSocios) return "Error: No se encuentran las hojas necesarias.";
+  
   const datosDeuda = hojaDeuda.getDataRange().getValues();
   const datosSocios = hojaSocios.getDataRange().getValues();
   
+  // 1. Armamos el directorio de emails de los socios
   let directorioSocios = {};
   for (let j = 1; j < datosSocios.length; j++) {
     let idSocio = datosSocios[j][0] ? datosSocios[j][0].toString().trim() : "";
@@ -262,21 +263,47 @@ function enviarMailsDeudores() {
   }
   
   let correosEnviados = 0;
+  
+  // 2. Recorremos la hoja de deudores aplicando el filtro estricto
   for (let i = 1; i < datosDeuda.length; i++) {
     let fila = datosDeuda[i];
     let idSocioDeuda = fila[0] ? fila[0].toString().trim() : "";
     let nombreJugador = fila[1];
-    let deudaMesActual = parseFloat(fila[3]) || 0;
     
-    if (idSocioDeuda && deudaMesActual > 0 && !idSocioDeuda.toLowerCase().includes("total")) {
+    // Saltamos filas vacías o filas de totales
+    if (!idSocioDeuda || idSocioDeuda.toLowerCase().includes("total")) continue;
+    
+    // Evaluamos los meses vencidos siguiendo tu esquema de columnas (Base 0 en JavaScript):
+    // fila[3] = Columna D (30 días)
+    // fila[4] = Columna E (60 días) -> Aquí empieza la deuda de 2 meses o más
+    
+    let deudaMesActual = parseFloat(fila[3]) || 0; 
+    
+    // Sumamos la deuda acumulada de 60 días o más (Columnas E hasta J -> posiciones de la 4 a la 9)
+    let deudaAntiguaAcumulada = 0;
+    for (let col = 4; col <= 9; col++) {
+      deudaAntiguaAcumulada += parseFloat(fila[col]) || 0;
+    }
+    
+    // CRITERIO: Debe tener saldo en los casilleros de 60 días o más viejos (2 o más meses de deuda)
+    if (deudaAntiguaAcumulada > 0) {
       let emailDestino = directorioSocios[idSocioDeuda];
+      
       if (emailDestino && emailDestino.includes("@")) {
+        // Calculamos el Total Real a Cobrar (Mes actual vencido + Meses anteriores)
+        let totalACobrar = deudaMesActual + deudaAntiguaAcumulada;
+        
         let asunto = "Aviso Importante: Regularización de Cuota - Club SFP Gonnet";
-        let cuerpo = `Estimado/a ${nombreJugador},\n\nLe comunicamos que registra un saldo pendiente en su cuota social por un importe de $${deudaMesActual}.\n\nSolicitamos tenga a bien acercarse o escribir a la tesorería del club 2216819698 para regularizar su situación.\n\nAtentamente,\nDepto. de Tesorería - Club SFP Gonnet.`;
-        MailApp.sendEmail(emailDestino, asunto, cuerpo);
+        let cuerpo = `Estimado/a ${nombreJugador},\n\nLe comunicamos que registra saldo pendiente en su cuota social por más de 2 meses, acumulando un Total a Cobrar de $${totalACobrar}.\n\nSolicitamos tenga a bien acercarse a la tesoreria en 495bis y 15 bis de lunes a viernes de 18 a 20hs, escribir a tesoreriagonnet@hotmail.com o por whatsapp al 2216819698 para regularizar su situación.\n\nAtentamente,\nTesorería - Club SFP Gonnet.`;
+        
+        // Envío formal desde la casilla autorizada
+        GmailApp.sendEmail(emailDestino, asunto, cuerpo, {
+          from: "tesoreriagonnet@gmail.com"
+        });
+        
         correosEnviados++;
       }
     }
   }
-  return "Proceso completado. Se enviaron exitosamente " + correosEnviados + " correos electrónicos.";
+  return "Proceso completado. Se enviaron exitosamente " + correosEnviados + " correos electrónicos a socios con 2 o más meses de deuda.";
 }
