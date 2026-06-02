@@ -307,3 +307,12 @@ function enviarMailsDeudores() {
   }
   return "Proceso completado. Se enviaron exitosamente " + correosEnviados + " correos electrónicos a socios con 2 o más meses de deuda.";
 }
+function ejecutarEnvioMailsUIDetalles() {
+  // Esta función es la que llama tu botón "Detalles" desde la página web
+  try {
+    const resultado = enviarMailsDeudores();
+    return resultado;
+  } catch(e) {
+    return "Error al enviar los correos: " + e.toString();
+  }
+}
