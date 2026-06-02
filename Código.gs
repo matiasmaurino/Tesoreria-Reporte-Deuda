@@ -1,3 +1,10 @@
+function doGet() {
+  return HtmlService.createTemplateFromFile('Index')
+      .evaluate()
+      .setTitle('Consulta de Deudas - Club SFP GONNET')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL); // <-- ESTA LÍNEA ES LA QUE CORRIGE EL ERROR
+}
 // ID de la carpeta principal de Tesorería provisto por el usuario
 const CARPETA_RAIZ_ID = '1pqMjUjZ-K4Bo3lC-kSYDaGjAUxQSaRrN';
 // ID del archivo de Google Sheets de destino
@@ -245,14 +252,23 @@ function obtenerDeudasPorDivision(divisionBuscada) {
 }
 function enviarMailsDeudores() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
-  const hojaDeuda = ss.getSheetByName('AntiguedaddeDeuda');
   const hojaSocios = ss.getSheetByName('Socios');
-  if (!hojaDeuda || !hojaSocios) return "Error: No se encuentran las hojas necesarias.";
+  const hojaReporte = ss.getSheetByName('Reporte'); // <-- Ahora procesamos todo desde acá
+  const hojaHistorial = ss.getSheetByName('Historial de email');
   
-  const datosDeuda = hojaDeuda.getDataRange().getValues();
+  if (!hojaSocios || !hojaReporte) {
+    return "Error: No se encuentran las hojas necesarias (Socios o Reporte).";
+  }
+  
+  // Encabezados del historial si la hoja es nueva
+  if (hojaHistorial && hojaHistorial.getLastRow() === 0) {
+    hojaHistorial.appendRow(["Fecha y Hora", "ID Socio", "Nombre Jugador", "Email Destino", "Monto Reclamado", "Estado del Envío"]);
+  }
+  
   const datosSocios = hojaSocios.getDataRange().getValues();
+  const datosReporte = hojaReporte.getDataRange().getValues();
   
-  // 1. Armamos el directorio de emails de los socios
+  // 1. Diccionario de e-mails de la hoja 'Socios' (ID en col A, Email en col F)
   let directorioSocios = {};
   for (let j = 1; j < datosSocios.length; j++) {
     let idSocio = datosSocios[j][0] ? datosSocios[j][0].toString().trim() : "";
@@ -263,56 +279,78 @@ function enviarMailsDeudores() {
   }
   
   let correosEnviados = 0;
+  let erroresAliasContador = 0;
+  const fechaActual = new Date();
   
-  // 2. Recorremos la hoja de deudores aplicando el filtro estricto
-  for (let i = 1; i < datosDeuda.length; i++) {
-    let fila = datosDeuda[i];
-    let idSocioDeuda = fila[0] ? fila[0].toString().trim() : "";
-    let nombreJugador = fila[1];
+  // 2. Recorremos la hoja 'Reporte' basándonos en tu columna W
+  // Columna A = Código (índice 0)
+  // Columna T = Nombre completo (índice 19)
+  // Columna U = INFORMAR TOTAL / Monto (índice 20)
+  // Columna W = ENVIAR EMAIL (índice 22)
+  for (let r = 1; r < datosReporte.length; r++) {
+    let fila = datosReporte[r];
+    let idSocioReporte = fila[0] ? fila[0].toString().trim() : "";
+    let nombreJugador = fila[19] ? fila[19].toString().trim() : "";
+    let montoTotal = parseFloat(fila[20]) || 0;
+    let condicionEnviar = fila[22] ? fila[22].toString().trim().toUpperCase() : ""; // Columna W
     
-    // Saltamos filas vacías o filas de totales
-    if (!idSocioDeuda || idSocioDeuda.toLowerCase().includes("total")) continue;
+    if (!idSocioReporte || idSocioReporte.toLowerCase().includes("total")) continue;
     
-    // Evaluamos los meses vencidos siguiendo tu esquema de columnas (Base 0 en JavaScript):
-    // fila[3] = Columna D (30 días)
-    // fila[4] = Columna E (60 días) -> Aquí empieza la deuda de 2 meses o más
-    
-    let deudaMesActual = parseFloat(fila[3]) || 0; 
-    
-    // Sumamos la deuda acumulada de 60 días o más (Columnas E hasta J -> posiciones de la 4 a la 9)
-    let deudaAntiguaAcumulada = 0;
-    for (let col = 4; col <= 9; col++) {
-      deudaAntiguaAcumulada += parseFloat(fila[col]) || 0;
-    }
-    
-    // CRITERIO: Debe tener saldo en los casilleros de 60 días o más viejos (2 o más meses de deuda)
-    if (deudaAntiguaAcumulada > 0) {
-      let emailDestino = directorioSocios[idSocioDeuda];
+    // CRITERIO ULTRA SIMPLE: Si tu columna W dice "ENVIAR EMAIL", se procesa.
+    if (condicionEnviar === "ENVIAR EMAIL") {
+      let emailDestino = directorioSocios[idSocioReporte];
       
       if (emailDestino && emailDestino.includes("@")) {
-        // Calculamos el Total Real a Cobrar (Mes actual vencido + Meses anteriores)
-        let totalACobrar = deudaMesActual + deudaAntiguaAcumulada;
-        
         let asunto = "Aviso Importante: Regularización de Cuota - Club SFP Gonnet";
-        let cuerpo = `Estimado/a ${nombreJugador},\n\nLe comunicamos que registra saldo pendiente en su cuota social por más de 2 meses, acumulando un Total a Cobrar de $${totalACobrar}.\n\nSolicitamos tenga a bien acercarse a la tesoreria en 495bis y 15 bis de lunes a viernes de 18 a 20hs, escribir a tesoreriagonnet@hotmail.com o por whatsapp al 2216819698 para regularizar su situación.\n\nAtentamente,\nTesorería - Club SFP Gonnet.`;
+        let cuerpo = `Estimado/a ${nombreJugador},\n\nLe comunicamos que registra un saldo pendiente en su cuota social por más de 2 meses, acumulando un Total a Cobrar de $${montoTotal}.\n\nSolicitamos tenga a bien acercarse a la tesoreria en 495bis y 15 bis de lunes a viernes de 18 a 20hs, responder este correo o enviar uno nuevo a tesoreriagonnet@gmail.com o por ultimo escribir por whatsapp al 2216819698 para regularizar su situación.\n\nAtentamente,\nTesorería - Club SFP Gonnet.`;
         
-        // Envío formal desde la casilla autorizada
-        GmailApp.sendEmail(emailDestino, asunto, cuerpo, {
-          from: "tesoreriagonnet@gmail.com"
-        });
-        
-        correosEnviados++;
+        // SISTEMA DE ENVÍO SEGURO CON HISTORIAL
+        try {
+          // Intento 1: Casilla de tesorería
+          GmailApp.sendEmail(emailDestino, asunto, cuerpo, {
+            from: "tesoreriagonnet@gmail.com"
+          });
+          correosEnviados++;
+          
+          if (hojaHistorial) {
+            hojaHistorial.appendRow([fechaActual, idSocioReporte, nombreJugador, emailDestino, montoTotal, "Enviado desde tesoreriagonnet@gmail.com"]);
+          }
+          
+        } catch (errorAlias) {
+          try {
+            // Intento 2: Cuenta principal de respaldo
+            GmailApp.sendEmail(emailDestino, asunto, cuerpo);
+            correosEnviados++;
+            erroresAliasContador++;
+            
+            if (hojaHistorial) {
+              hojaHistorial.appendRow([fechaActual, idSocioReporte, nombreJugador, emailDestino, montoTotal, "Enviado desde cuenta principal (Fallo Alias)"]);
+            }
+          } catch (errorGrave) {
+            console.error("Fallo de envío para ID " + idSocioReporte + ": " + errorGrave.toString());
+            if (hojaHistorial) {
+              hojaHistorial.appendRow([fechaActual, idSocioReporte, nombreJugador, emailDestino, montoTotal, "ERROR: " + errorGrave.toString()]);
+            }
+          }
+        }
       }
     }
   }
-  return "Proceso completado. Se enviaron exitosamente " + correosEnviados + " correos electrónicos a socios con 2 o más meses de deuda.";
+  
+  let mensajeFinal = "Proceso completado. Se enviaron exitosamente " + correosEnviados + " correos electrónicos según el filtro de la columna W.";
+  if (erroresAliasContador > 0) {
+    mensajeFinal += "\n\n⚠️ Nota: " + erroresAliasContador + " correos se enviaron desde tu cuenta principal. El alias requirió revisión.";
+  }
+  return mensajeFinal;
 }
-function ejecutarEnvioMailsUIDetalles() {
-  // Esta función es la que llama tu botón "Detalles" desde la página web
+function ejecutarEnvioMailsUI() {
   try {
+    // Llama al proceso de envío de correos
     const resultado = enviarMailsDeudores();
-    return resultado;
+    
+    // Muestra una ventana flotante con el resultado en la planilla
+    SpreadsheetApp.getUi().alert(resultado);
   } catch(e) {
-    return "Error al enviar los correos: " + e.toString();
+    SpreadsheetApp.getUi().alert("Error en el envío: " + e.toString());
   }
 }
