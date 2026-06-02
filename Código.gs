@@ -3,7 +3,7 @@ function doGet() {
       .evaluate()
       .setTitle('Consulta de Deudas - Club SFP GONNET')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL); // <-- ESTA LÍNEA ES LA QUE CORRIGE EL ERROR
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL); // <-- Revisa que quede así
 }
 // ID de la carpeta principal de Tesorería provisto por el usuario
 const CARPETA_RAIZ_ID = '1pqMjUjZ-K4Bo3lC-kSYDaGjAUxQSaRrN';
