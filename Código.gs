@@ -2,6 +2,8 @@
 const CARPETA_RAIZ_ID = '1pqMjUjZ-K4Bo3lC-kSYDaGjAUxQSaRrN';
 // ID del archivo de Google Sheets de destino
 const SPREADSHEET_DESTINO_ID = '1OQ-BGFqYxEqy1UR6YkREXnVqwaNiFmLVEWW_Q_SB50k';
+// NUEVO: ID de la carpeta específica de Matrículas provisto por el usuario
+const CARPETA_MATRICULAS_ID = '1R-s385voSUlgo33xa8pqpuc_KEUEKdZS';
 
 /**
  * 1. Crea el menú "Club online" al abrir la hoja de cálculo.
@@ -9,22 +11,30 @@ const SPREADSHEET_DESTINO_ID = '1OQ-BGFqYxEqy1UR6YkREXnVqwaNiFmLVEWW_Q_SB50k';
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Club online')
-    .addItem('Actualizar Socios y Deudas 🔄', 'actualizarTodo')
+    .addItem('Actualizar Todo 🔄', 'actualizarTodo')
     .addSeparator()
     .addItem('Enviar Mails a Deudores ✉️', 'enviarMailsDeudores')
     .addToUi();
 }
 
 /**
- * Nueva función unificada que actualiza todo junto consecutivamente
+ * Función unificada que actualiza Socios, Deudas y Matrículas consecutivamente
  */
 function actualizarTodo() {
   const ui = SpreadsheetApp.getUi();
   try {
-    ui.alert('Proceso iniciado', 'Actualizando datos de socios... Por favor, espera.', ui.ButtonSet.OK);
+    ui.alert('Proceso iniciado', 'Actualizando base de datos completa... Por favor, espera.', ui.ButtonSet.OK);
+    
+    // 1. Ejecuta actualización de socios
     actualizarSocios();
+    
+    // 2. Ejecuta antigüedad de deuda
     actualizarAntiguedadDeuda();
-    ui.alert('Proceso completado', 'Se han actualizado los socios y la antigüedad de la deuda correctamente. ✅', ui.ButtonSet.OK);
+    
+    // 3. NUEVO: Ejecuta la importación y conversión de Matrículas
+    actualizarMatriculas();
+    
+    ui.alert('Proceso completado', 'Se han actualizado los Socios, la Antigüedad de Deuda y las Matrículas correctamente. ✅', ui.ButtonSet.OK);
   } catch (error) {
     ui.alert('Error', 'Hubo un problema durante la actualización: ' + error.toString(), ui.ButtonSet.OK);
   }
@@ -35,7 +45,7 @@ function actualizarSocios() {
   const nombreHojaDestino = "Socios";
   const columnasAMantener = [1, 2, 3, 4, 9, 11, 16, 22, 28, 29];
   const filaInicioOriginal = 6;
-  procesarUltimoArchivo(nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener);
+  procesarUltimoArchivo(CARPETA_RAIZ_ID, nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener, false);
 }
 
 function actualizarAntiguedadDeuda() {
@@ -43,26 +53,45 @@ function actualizarAntiguedadDeuda() {
   const nombreHojaDestino = "AntiguedaddeDeuda";
   const columnasAMantener = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
   const filaInicioOriginal = 5;
-  procesarUltimoArchivo(nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener);
+  procesarUltimoArchivo(CARPETA_RAIZ_ID, nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener, false);
 }
 
 /**
- * Función auxiliar encargada de buscar el último archivo Excel, filtrar y pegar en destino.
+ * NUEVA FUNCIÓN: Procesa la carpeta de Matrículas invirtiendo el signo de los números
  */
-function procesarUltimoArchivo(nombreSubcarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener) {
-  const carpetaRaiz = DriveApp.getFolderById(CARPETA_RAIZ_ID);
-  const subcarpetas = carpetaRaiz.getFoldersByName(nombreSubcarpeta);
+function actualizarMatriculas() {
+  const nombreHojaDestino = "Matriculas";
+  // Mantiene la misma estructura de columnas y fila de inicio que AntiguedaddeDeuda
+  const columnasAMantener = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  const filaInicioOriginal = 5;
   
-  if (!subcarpetas.hasNext()) {
-    SpreadsheetApp.getUi().alert('Error: No se encontró la carpeta llamada "' + nombreSubcarpeta + '"');
-    return;
+  // Llamamos al procesador indicándole la carpeta específica y activando el multiplicador por -1
+  procesarUltimoArchivo(CARPETA_MATRICULAS_ID, null, nombreHojaDestino, filaInicioOriginal, columnasAMantener, true);
+}
+
+/**
+ * Función auxiliar modificada encargada de buscar, filtrar, transformar y pegar en destino.
+ */
+function procesarUltimoArchivo(idCarpetaOrigen, nombreSubcarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener, multiplicarPorMenosUno) {
+  let carpetaDestino;
+  
+  if (nombreSubcarpeta) {
+    const carpetaRaiz = DriveApp.getFolderById(idCarpetaOrigen);
+    const subcarpetas = carpetaRaiz.getFoldersByName(nombreSubcarpeta);
+    if (!subcarpetas.hasNext()) {
+      SpreadsheetApp.getUi().alert('Error: No se encontró la carpeta llamada "' + nombreSubcarpeta + '"');
+      return;
+    }
+    carpetaDestino = subcarpetas.next();
+  } else {
+    // Si no se define subcarpeta, lee directamente el ID provisto (caso Matrículas)
+    carpetaDestino = DriveApp.getFolderById(idCarpetaOrigen);
   }
   
-  const carpetaDestino = subcarpetas.next();
   const archivos = carpetaDestino.getFiles();
-  
   let ultimoArchivo = null;
   let fechaUltimoArchivo = 0;
+  
   while (archivos.hasNext()) {
     const archivo = archivos.next();
     if (archivo.getName().toLowerCase().endsWith('.xls') || archivo.getName().toLowerCase().endsWith('.xlsx')) {
@@ -75,7 +104,7 @@ function procesarUltimoArchivo(nombreSubcarpeta, nombreHojaDestino, filaInicioOr
   }
   
   if (!ultimoArchivo) {
-    SpreadsheetApp.getUi().alert('No se encontraron archivos de Excel en la carpeta "' + nombreSubcarpeta + '"');
+    SpreadsheetApp.getUi().alert('No se encontraron archivos de Excel en la carpeta configurada.');
     return;
   }
   
@@ -98,8 +127,16 @@ function procesarUltimoArchivo(nombreSubcarpeta, nombreHojaDestino, filaInicioOr
     for (let i = filaInicioOriginal - 1; i < datosOrigen.length; i++) {
       const filaOriginal = datosOrigen[i];
       const nuevaFila = [];
+      
       columnasAMantener.forEach(idx => {
-        nuevaFila.push(filaOriginal[idx - 1] !== undefined ? filaOriginal[idx - 1] : "");
+        let valor = filaOriginal[idx - 1];
+        
+        // REQUERIMIENTO ESPECIAL: Si es Matrícula, validamos y multiplicamos por -1 los números != 0
+        if (multiplicarPorMenosUno && typeof valor === 'number' && valor !== 0) {
+          valor = valor * -1;
+        }
+        
+        nuevaFila.push(valor !== undefined ? valor : "");
       });
       matrizFiltrada.push(nuevaFila);
     }
@@ -162,9 +199,14 @@ function obtenerDeudasPorDivision(divisionBuscada) {
   if (!hojaReporte) return { nombresMeses: [], listaJugadores: [] };
   
   const datosReporte = hojaReporte.getDataRange().getValues();
+  // Extraer las etiquetas dinámicas de los 7 campos (Columnas M a S)
   let nombresMeses = [];
-  for (let col = 12; col <= 18; col++) { 
+  for (let col = 12; col <= 18; col++) { // Índices 12 (M) al 18 (S)
     let nombreHeader = datosReporte[0][col] ? datosReporte[0][col].toString().trim() : "Mes";
+    
+    // LIMPIEZA DE PARÉNTESIS: Quitamos los '(' y ')' con expresiones regulares
+    nombreHeader = nombreHeader.replace(/[\(\)]/g, "");
+    
     nombresMeses.push(nombreHeader);
   }
 
@@ -172,18 +214,18 @@ function obtenerDeudasPorDivision(divisionBuscada) {
   if (!divisionBuscada) return { nombresMeses: nombresMeses, listaJugadores: [] };
   let buscarLimpio = divisionBuscada.toLowerCase().replace(/[^a-z0-9]/g, "");
 
+  // Recorremos la hoja desde la fila 2 para extraer los registros
   for (let k = 1; k < datosReporte.length; k++) {
     let filaR = datosReporte[k];
-    if (!filaR || filaR[7] === undefined) continue; 
+    if (!filaR || filaR[7] === undefined) continue; // Columna H (Divisiones)
     
     let divisionFilaLimpia = filaR[7].toString().toLowerCase().replace(/[^a-z0-9]/g, "");
     if (divisionFilaLimpia !== "" && divisionFilaLimpia.includes(buscarLimpio)) {
       
       let totalDeuda = parseFloat(filaR[20]) || 0; 
-      if (totalDeuda <= 0) continue; 
+      let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre"; // Columna T
       
-      let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre";
-      
+      // Reemplazo y simplificación de las Formas de Pago (Columna G)
       let formaPagoRaw = filaR[6] ? filaR[6].toString().trim() : "-";
       let formaPago = formaPagoRaw;
       if (formaPagoRaw.includes("Entidad de Recaudación | Pagos Virtuales del Sur")) {
@@ -192,21 +234,24 @@ function obtenerDeudasPorDivision(divisionBuscada) {
         formaPago = "Tesoreria";
       }
       
-      let descuento = filaR[8] ? filaR[8].toString().trim() : "";
-      let periodoDesc = filaR[9] ? filaR[9].toString().trim() : "";
+      let descuento = filaR[8] ? filaR[8].toString().trim() : ""; // Columna I
+      let periodoDesc = filaR[9] ? filaR[9].toString().trim() : ""; // Columna J
       
+      // Capturar los valores de los 7 campos (Columnas M a S)
       let valoresMeses = [];
       let mesesConDeudaActiva = 0;
       
       for (let col = 12; col <= 18; col++) {
         let valorCelda = parseFloat(filaR[col]) || 0;
         valoresMeses.push(valorCelda);
+        
         if (valorCelda > 0) {
           mesesConDeudaActiva++;
         }
       }
       
       let alertaCritica = (mesesConDeudaActiva > 2);
+      
       listaJugadores.push({
         nombre: nombre,
         formaPago: formaPago,
@@ -219,13 +264,13 @@ function obtenerDeudasPorDivision(divisionBuscada) {
     }
   }
   
+  // Ordenar de mayor a menor monto de deuda acumulada
   listaJugadores.sort((a, b) => b.total - a.total);
   return {
     nombresMeses: nombresMeses,
     listaJugadores: listaJugadores
   };
 }
-
 function enviarMailsDeudores() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
   const hojaDeuda = ss.getSheetByName('AntiguedaddeDeuda');
