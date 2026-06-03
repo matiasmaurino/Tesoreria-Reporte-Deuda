@@ -114,6 +114,85 @@
         border-color: #fecb00;
         box-shadow: 0 0 0 0.25rem rgba(254, 203, 0, 0.25);
       }
+
+      /* BOTÓN DESCARGAR PDF FLOTANTE */
+      .btn-pdf-flotante {
+        position: fixed;
+        bottom: 25px;
+        right: 25px;
+        background: #111111;
+        color: #fecb00;
+        border: 2px solid #fecb00;
+        padding: 12px 20px;
+        border-radius: 30px;
+        font-weight: bold;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        z-index: 2000;
+        transition: all 0.2s ease;
+        display: none; /* Se muestra solo cuando hay datos cargados */
+      }
+      .btn-pdf-flotante:hover {
+        background: #fecb00;
+        color: #111111;
+        transform: scale(1.05);
+      }
+
+      /* ==========================================
+         ESTILOS EXCLUSIVOS PARA IMPRESIÓN / PDF
+         ========================================== */
+      @media print {
+        body {
+          background-color: #ffffff !important;
+          font-size: 12pt;
+        }
+        /* Ocultar elementos de interacción web */
+        .contenedor-fijo .container, 
+        .btn-pdf-flotante, 
+        #loader {
+          display: none !important;
+        }
+        /* Hacer que la cabecera no sea fija y se adapte al papel */
+        .contenedor-fijo {
+          position: relative !important;
+          box-shadow: none !important;
+          padding-bottom: 0 !important;
+        }
+        .header-club {
+          background: #111111 !important;
+          color: #ffffff !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+          border-bottom: 4px solid #fecb00 !important;
+          padding: 15px !important;
+          margin-bottom: 20px;
+        }
+        .titulo-panel {
+          color: #fecb00 !important;
+        }
+        /* Ajustes de las tarjetas para que no se corten feo entre páginas */
+        .tarjeta-jugador {
+          page-break-inside: avoid;
+          break-inside: avoid;
+          border: 1px solid #ced4da !important;
+          border-left: 6px solid #6c757d !important;
+          box-shadow: none !important;
+          background: #ffffff !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .tarjeta-alerta {
+          border-left: 6px solid #dc3545 !important;
+          background-color: #fffafb !important;
+        }
+        .monto-deuda {
+          color: #dc3545 !important;
+        }
+        /* Forzar la impresión de colores de fondo en navegadores */
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+      }
     </style>
   </head>
   <body>
@@ -140,6 +219,10 @@
         </div>
       </div>
     </div>
+
+    <button id="btnPdf" class="btn-pdf-flotante" onclick="descargarPDF()">
+      📄 Descargar PDF
+    </button>
 
     <div class="container zona-scroll">
       <div id="loader" class="loader" style="display: none;">
@@ -175,7 +258,9 @@
       function filtrarDivisiones() {
         let textoBuscado = document.getElementById('buscarDivision').value.toLowerCase().trim();
         let contenedor = document.getElementById('contenedorTarjetas');
+        let btnPdf = document.getElementById('btnPdf');
         contenedor.innerHTML = '';
+        btnPdf.style.display = 'none';
         
         let divisionesFiltradas = todasLasDivisiones.filter(function(div) {
           return div.toLowerCase().includes(textoBuscado);
@@ -188,13 +273,16 @@
         let division = document.getElementById('selectDivision').value;
         let contenedor = document.getElementById('contenedorTarjetas');
         let loader = document.getElementById('loader');
+        let btnPdf = document.getElementById('btnPdf');
         
         if (!division) {
           contenedor.innerHTML = '';
+          btnPdf.style.display = 'none';
           return;
         }
         
         contenedor.innerHTML = '';
+        btnPdf.style.display = 'none';
         loader.style.display = 'block';
         
         google.script.run.withSuccessHandler(function(objetoContenedor) {
@@ -207,6 +295,9 @@
             contenedor.innerHTML = '<div class="alert alert-light text-center shadow-sm text-muted">No se registran jugadores con deudas activas en esta categoría.</div>';
             return;
           }
+          
+          // Si hay jugadores, mostramos el botón de PDF
+          btnPdf.style.display = 'block';
           
           let formateador = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 });
           
@@ -253,6 +344,20 @@
             contenedor.appendChild(divTarjeta);
           });
         }).obtenerDeudasPorDivision(division);
+      }
+
+      /* FUNCIÓN QUE ACTIVA LA DESCARGA O GUARDADO EN PDF */
+      function descargarPDF() {
+        let divisionSeleccionada = document.getElementById('selectDivision').value;
+        // Cambiamos temporalmente el título de la pestaña del navegador para que el PDF se guarde por defecto con un nombre limpio
+        let tituloOriginal = document.title;
+        document.title = "Reporte_Deudas_" + divisionSeleccionada.replace(/[^a-zA-Z0-9]/g, "_");
+        
+        // Abre la interfaz nativa del dispositivo para Guardar como PDF / Imprimir
+        window.print();
+        
+        // Restauramos el título original
+        document.title = tituloOriginal;
       }
     </script>
   </body>
