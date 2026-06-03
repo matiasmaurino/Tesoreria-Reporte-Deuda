@@ -51,6 +51,26 @@
         text-transform: uppercase;
       }
 
+      /* BOTONES DE FILTRADO PREMIUM */
+      .grupo-filtros .btn {
+        font-size: 0.85rem;
+        font-weight: 600;
+        border-radius: 20px;
+        padding: 6px 16px;
+        transition: all 0.2s ease;
+      }
+      
+      .btn-club-outline {
+        border: 2px solid #111111;
+        color: #111111;
+        background: transparent;
+      }
+      
+      .btn-club-outline:hover, .btn-club-outline.active {
+        background: #111111;
+        color: #fecb00;
+      }
+
       /* TARJETAS DE JUGADORES OPTIMIZADAS */
       .tarjeta-jugador { 
         background: white; 
@@ -88,6 +108,17 @@
         border: 1px solid #c8e6c9;
         text-transform: uppercase;
       }
+      
+      .badge-cuota-unica {
+        background-color: #fff3cd;
+        color: #856404;
+        font-size: 0.75rem;
+        padding: 6px 10px;
+        border-radius: 8px;
+        font-weight: bold;
+        border: 1px solid #ffeeba;
+        text-transform: uppercase;
+      }
 
       .monto-deuda { 
         color: #dc3545; 
@@ -114,85 +145,6 @@
         border-color: #fecb00;
         box-shadow: 0 0 0 0.25rem rgba(254, 203, 0, 0.25);
       }
-
-      /* BOTÓN DESCARGAR PDF FLOTANTE */
-      .btn-pdf-flotante {
-        position: fixed;
-        bottom: 25px;
-        right: 25px;
-        background: #111111;
-        color: #fecb00;
-        border: 2px solid #fecb00;
-        padding: 12px 20px;
-        border-radius: 30px;
-        font-weight: bold;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        z-index: 2000;
-        transition: all 0.2s ease;
-        display: none; /* Se muestra solo cuando hay datos cargados */
-      }
-      .btn-pdf-flotante:hover {
-        background: #fecb00;
-        color: #111111;
-        transform: scale(1.05);
-      }
-
-      /* ==========================================
-         ESTILOS EXCLUSIVOS PARA IMPRESIÓN / PDF
-         ========================================== */
-      @media print {
-        body {
-          background-color: #ffffff !important;
-          font-size: 12pt;
-        }
-        /* Ocultar elementos de interacción web */
-        .contenedor-fijo .container, 
-        .btn-pdf-flotante, 
-        #loader {
-          display: none !important;
-        }
-        /* Hacer que la cabecera no sea fija y se adapte al papel */
-        .contenedor-fijo {
-          position: relative !important;
-          box-shadow: none !important;
-          padding-bottom: 0 !important;
-        }
-        .header-club {
-          background: #111111 !important;
-          color: #ffffff !important;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
-          border-bottom: 4px solid #fecb00 !important;
-          padding: 15px !important;
-          margin-bottom: 20px;
-        }
-        .titulo-panel {
-          color: #fecb00 !important;
-        }
-        /* Ajustes de las tarjetas para que no se corten feo entre páginas */
-        .tarjeta-jugador {
-          page-break-inside: avoid;
-          break-inside: avoid;
-          border: 1px solid #ced4da !important;
-          border-left: 6px solid #6c757d !important;
-          box-shadow: none !important;
-          background: #ffffff !important;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
-        }
-        .tarjeta-alerta {
-          border-left: 6px solid #dc3545 !important;
-          background-color: #fffafb !important;
-        }
-        .monto-deuda {
-          color: #dc3545 !important;
-        }
-        /* Forzar la impresión de colores de fondo en navegadores */
-        * {
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
-      }
     </style>
   </head>
   <body>
@@ -210,19 +162,24 @@
             <input type="text" id="buscarDivision" class="form-control form-control-lg" placeholder="Ej: Senior, 2010, Femenino..." oninput="filtrarDivisiones()">
           </div>
 
-          <div>
+          <div class="mb-3">
             <label for="selectDivision" class="form-label fw-bold text-secondary" style="font-size: 0.9rem;">📋 Selecciona la opción filtrada:</label>
             <select id="selectDivision" class="form-select form-select-lg" onchange="cargarDeudas()">
               <option value="">Cargando listado...</option>
             </select>
           </div>
+          
+          <div id="seccionFiltros" class="text-center grupo-filtros mt-2" style="display: none;">
+            <div class="d-flex flex-wrap justify-content-center gap-2">
+              <button id="btnFiltroTodo" class="btn btn-club-outline active" onclick="cambiarFiltroDeuda('todos')">👥 Plantel Completo</button>
+              <button id="btnFiltroUno" class="btn btn-club-outline" onclick="cambiarFiltroDeuda('1cuota')">⚠️ Debe 1 Cuota</button>
+              <button id="btnFiltroVarios" class="btn btn-club-outline" onclick="cambiarFiltroDeuda('2mas')">🚨 Debe ≥ 2 Cuotas</button>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
-
-    <button id="btnPdf" class="btn-pdf-flotante" onclick="descargarPDF()">
-      📄 Descargar PDF
-    </button>
 
     <div class="container zona-scroll">
       <div id="loader" class="loader" style="display: none;">
@@ -235,6 +192,9 @@
 
     <script>
       let todasLasDivisiones = [];
+      // Variables globales para almacenar la respuesta actual del servidor y el filtro seleccionado
+      let datosActualesCache = null;
+      let filtroMorosidadActual = 'todos'; 
 
       window.onload = function() {
         google.script.run.withSuccessHandler(function(divisiones) {
@@ -258,9 +218,10 @@
       function filtrarDivisiones() {
         let textoBuscado = document.getElementById('buscarDivision').value.toLowerCase().trim();
         let contenedor = document.getElementById('contenedorTarjetas');
-        let btnPdf = document.getElementById('btnPdf');
+        let seccionFiltros = document.getElementById('seccionFiltros');
         contenedor.innerHTML = '';
-        btnPdf.style.display = 'none';
+        seccionFiltros.style.display = 'none';
+        datosActualesCache = null;
         
         let divisionesFiltradas = todasLasDivisiones.filter(function(div) {
           return div.toLowerCase().includes(textoBuscado);
@@ -273,91 +234,147 @@
         let division = document.getElementById('selectDivision').value;
         let contenedor = document.getElementById('contenedorTarjetas');
         let loader = document.getElementById('loader');
-        let btnPdf = document.getElementById('btnPdf');
+        let seccionFiltros = document.getElementById('seccionFiltros');
         
         if (!division) {
           contenedor.innerHTML = '';
-          btnPdf.style.display = 'none';
+          seccionFiltros.style.display = 'none';
+          datosActualesCache = null;
           return;
         }
         
         contenedor.innerHTML = '';
-        btnPdf.style.display = 'none';
+        seccionFiltros.style.display = 'none';
         loader.style.display = 'block';
         
         google.script.run.withSuccessHandler(function(objetoContenedor) {
           loader.style.display = 'none';
           
-          let meses = objetoContenedor.nombresMeses;
-          let jugadores = objetoContenedor.listaJugadores;
+          // Almacenamos los datos en caché para poder filtrarlos instantáneamente en el cliente
+          datosActualesCache = objetoContenedor;
           
-          if(jugadores.length === 0) {
-            contenedor.innerHTML = '<div class="alert alert-light text-center shadow-sm text-muted">No se registran jugadores con deudas activas en esta categoría.</div>';
-            return;
-          }
+          // Reseteamos el botón activo a 'Plantel Completo' cada vez que cambia la división
+          filtroMorosidadActual = 'todos';
+          actualizarEstilosBotones();
           
-          // Si hay jugadores, mostramos el botón de PDF
-          btnPdf.style.display = 'block';
+          // Ejecutamos la renderización visual aplicando el filtro
+          renderizarTarjetasFiltradas();
           
-          let formateador = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 });
-          
-          jugadores.forEach(function(j) {
-            let divTarjeta = document.createElement('div');
-            divTarjeta.className = 'tarjeta-jugador' + (j.alerta ? ' tarjeta-alerta' : '');
-            
-            let bloqueDescuento = "";
-            if (j.descuento || j.periodoDesc) {
-              bloqueDescuento = `<div class="mt-1 text-dark small" style="font-size: 0.8rem;">🎁 <strong>Bonificación:</strong> ${j.descuento} ${j.periodoDesc}</div>`;
-            }
-
-            let bloquesMesesHTML = "";
-            for (let i = 0; i < meses.length; i++) {
-              let montoMes = j.valoresMeses[i];
-              let claseColor = montoMes > 0 ? 'monto-deuda' : 'text-success';
-              
-              bloquesMesesHTML += `
-                <div class="col-4 col-sm-3 mb-1">
-                  <span class="text-muted" style="font-size: 0.72rem;">${meses[i]}</span><br>
-                  <span class="${claseColor}" style="font-size: 0.82rem; font-weight: 600;">${formateador.format(montoMes)}</span>
-                </div>`;
-            }
-
-            divTarjeta.innerHTML = `
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="fw-bold text-dark" style="font-size: 1.05rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
-                ${j.alerta ? '<span class="badge-critico">🔴 Debe más de 2 meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
-              </div>
-              
-              <div class="row g-1 border-top pt-2 mt-1 text-start">
-                ${bloquesMesesHTML}
-              </div>
-
-              <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem;">
-                <div><strong>Forma de Pago:</strong> ${j.formaPago}</div>
-                ${bloqueDescuento}
-              </div>
-
-              <div class="text-end fw-bold text-dark border-top pt-2 mt-2" style="font-size: 1.05rem;">
-                Total a Cobrar: <span class="monto-deuda">${formateador.format(j.total)}</span>
-              </div>
-            `;
-            contenedor.appendChild(divTarjeta);
-          });
         }).obtenerDeudasPorDivision(division);
       }
 
-      /* FUNCIÓN QUE ACTIVA LA DESCARGA O GUARDADO EN PDF */
-      function descargarPDF() {
-        let divisionSeleccionada = document.getElementById('selectDivision').value;
-        // Cambiamos temporalmente el título de la pestaña del navegador para que el PDF se guarde por defecto con un nombre limpio
-        let tituloOriginal = document.title;
-        document.title = "Reporte_Deudas_" + divisionSeleccionada.replace(/[^a-zA-Z0-9]/g, "_");
+      // Cambia el criterio de visualización y refresca la lista de tarjetas
+      function cambiarFiltroDeuda(tipoFiltro) {
+        filtroMorosidadActual = tipoFiltro;
+        actualizarEstilosBotones();
+        renderizarTarjetasFiltradas();
+      }
+
+      // Cambia visualmente cuál de los 3 botones está seleccionado (Negro/Oro sólido)
+      function actualizarEstilosBotones() {
+        document.getElementById('btnFiltroTodo').classList.remove('active');
+        document.getElementById('btnFiltroUno').classList.remove('active');
+        document.getElementById('btnFiltroVarios').classList.remove('active');
         
-        // Abre la interfaz nativa del dispositivo para Guardar como PDF / Imprimir
-        window.print();
+        if (filtroMorosidadActual === 'todos') document.getElementById('btnFiltroTodo').classList.add('active');
+        if (filtroMorosidadActual === '1cuota') document.getElementById('btnFiltroUno').classList.add('active');
+        if (filtroMorosidadActual === '2mas') document.getElementById('btnFiltroVarios').classList.add('active');
+      }
+
+      // Procesa el listado guardado basándose en la cantidad de meses que el jugador tiene deuda activa (>0)
+      function renderizarTarjetasFiltradas() {
+        let contenedor = document.getElementById('contenedorTarjetas');
+        let seccionFiltros = document.getElementById('seccionFiltros');
+        contenedor.innerHTML = '';
         
-        // Restauramos el título original
-        document.title = tituloOriginal;
+        if (!datosActualesCache) return;
+        
+        let meses = datosActualesCache.nombresMeses;
+        let jugadores = datosActualesCache.listaJugadores;
+        
+        if (jugadores.length === 0) {
+          contenedor.innerHTML = '<div class="alert alert-light text-center shadow-sm text-muted">No se registran jugadores activos en esta categoría.</div>';
+          seccionFiltros.style.display = 'none';
+          return;
+        }
+        
+        // Hacemos visible la barra de botones de filtrado
+        seccionFiltros.style.display = 'block';
+        
+        let formateador = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 });
+        let contadorVisualizados = 0;
+
+        jugadores.forEach(function(j) {
+          // Contamos cuántos meses tienen deudas activas de manera exacta (monto > 0)
+          let mesesDebidos = 0;
+          j.valoresMeses.forEach(function(monto) {
+            if (monto > 0) mesesDebidos++;
+          });
+          
+          // Lógica de discriminación de filtros solicitados:
+          if (filtroMorosidadActual === '1cuota' && mesesDebidos !== 1) return;
+          if (filtroMorosidadActual === '2mas' && mesesDebidos < 2) return;
+          
+          contadorVisualizados++;
+          
+          let divTarjeta = document.createElement('div');
+          // Si debe 2 o más cuotas le aplicamos el borde izquierdo rojo crítico de Bootstrap
+          divTarjeta.className = 'tarjeta-jugador' + (mesesDebidos >= 2 ? ' tarjeta-alerta' : '');
+          
+          let bloqueDescuento = "";
+          if (j.descuento || j.periodoDesc) {
+            bloqueDescuento = `<div class="mt-1 text-dark small" style="font-size: 0.8rem;">🎁 <strong>Bonificación:</strong> ${j.descuento} ${j.periodoDesc}</div>`;
+          }
+
+          let bloquesMesesHTML = "";
+          for (let i = 0; i < meses.length; i++) {
+            let montoMes = j.valoresMeses[i];
+            let claseColor = montoMes > 0 ? 'monto-deuda' : 'text-success';
+            
+            bloquesMesesHTML += `
+              <div class="col-4 col-sm-3 mb-1">
+                <span class="text-muted" style="font-size: 0.72rem;">${meses[i]}</span><br>
+                <span class="${claseColor}" style="font-size: 0.82rem; font-weight: 600;">${formateador.format(montoMes)}</span>
+              </div>`;
+          }
+
+          // Definición del Badge de estado según cantidad exacta de meses debidos
+          let badgeEstadoHTML = '<span class="badge-regular">✓ Al Día</span>';
+          if (mesesDebidos === 1) {
+            badgeEstadoHTML = '<span class="badge-cuota-unica">⚠️ Debe 1 mes</span>';
+          } else if (mesesDebidos >= 2) {
+            badgeEstadoHTML = `<span class="badge-critico">🔴 Debe ${mesesDebidos} meses</span>`;
+          }
+
+          divTarjeta.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-bold text-dark" style="font-size: 1.05rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
+              ${badgeEstadoHTML}
+            </div>
+            
+            <div class="row g-1 border-top pt-2 mt-1 text-start">
+              ${bloquesMesesHTML}
+            </div>
+
+            <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem;">
+              <div><strong>Forma de Pago:</strong> ${j.formaPago}</div>
+              ${bloqueDescuento}
+            </div>
+
+            <div class="text-end fw-bold text-dark border-top pt-2 mt-2" style="font-size: 1.05rem;">
+              Total a Cobrar: <span class="monto-deuda">${formateador.format(j.total)}</span>
+            </div>
+          `;
+          contenedor.appendChild(divTarjeta);
+        });
+        
+        // Si el filtro actual vacía la pantalla, informamos correctamente al usuario
+        if (contadorVisualizados === 0) {
+          let msg = "No hay jugadores en esta condición para el filtro seleccionado.";
+          if (filtroMorosidadActual === '1cuota') msg = "No hay ningún jugador que deba exactamente 1 cuota.";
+          if (filtroMorosidadActual === '2mas') msg = "No hay ningún jugador moroso con 2 o más cuotas vencidas.";
+          contenedor.innerHTML = `<div class="alert alert-light text-center shadow-sm text-muted">${msg}</div>`;
+        }
       }
     </script>
   </body>
