@@ -34,7 +34,7 @@ function actualizarTodo() {
     // 3. Ejecuta la importación y conversión de Matrículas
     actualizarMatriculas();
 
-    // 4. NUEVO: Agrega solo los nuevos jugadores de la Liga Sur sin pisar tus anotaciones
+   // 4. Ejecuta la importación de Liga Sur sin alterar tus notas manuales en las filas viejas
     actualizarSociosLigaSur();
     
     ui.alert('Proceso completado', 'Se han actualizado los Socios, Deuda, Matrículas y los nuevos de Liga Sur correctamente. ✅', ui.ButtonSet.OK);
@@ -51,21 +51,21 @@ function actualizarSocios() {
   procesarUltimoArchivo(CARPETA_RAIZ_ID, nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener, false);
 }
 
+// 1. NUEVA FUNCIÓN DISPARADORA (Se llama desde actualizarTodo)
+// 1. FUNCIÓN DISPARADORA (Asegúrate de llamarla en actualizarTodo)
 function actualizarSociosLigaSur() {
   const nombreCarpeta = "Socios";
   const nombreHojaDestino = "Liga Sur Fichados";
   
-  // Incluimos el 5 (Columna E - DNI) junto a las demás columnas
+  // Incluye el número 5 que corresponde a la columna E (Nº Documento / DNI)
   const columnasAMantener = [1, 2, 3, 4, 5, 9, 11, 16, 22, 28, 29];
   const filaInicioOriginal = 6;
-  
-  // ID de la carpeta que nos diste
   const carpetaSociosId = "1aHuI-BqErWxN_ShsStmwYOMtOGYbFFrl"; 
   
-  // Llamamos a la nueva función que crearemos abajo
   procesarUltimoArchivoSur(carpetaSociosId, nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener);
 }
 
+// 2. FUNCIÓN DE PROCESAMIENTO ADAPTADA A DRIVE API V3
 function procesarUltimoArchivoSur(carpetaId, nombreCarpeta, nombreHojaDestino, filaInicio, columnasAMantener) {
   const carpeta = DriveApp.getFolderById(carpetaId);
   const archivos = carpeta.getFiles();
@@ -90,38 +90,50 @@ function procesarUltimoArchivoSur(carpetaId, nombreCarpeta, nombreHojaDestino, f
   let archivoTemporalId = null;
   const mimeType = ultimoArchivo.getMimeType();
 
-  // --- SOLUCIÓN AL ERROR: CONVERSIÓN DE EXCEL A GOOGLE SHEETS ---
-  if (mimeType === MimeType.MICROSOFT_EXCEL || mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
-    // Si es un archivo de Excel, creamos una copia en formato Google Sheets
-    const config = {
-      title: ultimoArchivo.getName().replace(/\.[^/.]+$/, ""), // Quita la extensión .xls/.xlsx
-      parents: [{id: carpetaId}]
+  if (mimeType === MimeType.MICROSOFT_EXCEL || mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || ultimoArchivo.getName().endsWith('.xls')) {
+    const recursoArchivo = {
+      name: "Temporal_Sur_" + ultimoArchivo.getName().replace(/\.[^/.]+$/, ""),
+      mimeType: "application/vnd.google-apps.spreadsheet",
+      parents: [carpetaId]
     };
     
-    // Convertimos usando Advanced Drive Service (Drive API)
-    const archivoConvertido = Drive.Files.insert(config, ultimoArchivo.getBlob());
+    const archivoConvertido = Drive.Files.create(recursoArchivo, ultimoArchivo.getBlob());
     archivoTemporalId = archivoConvertido.id;
     ssOrigen = SpreadsheetApp.openById(archivoTemporalId);
   } else {
-    // Si ya era una Hoja de cálculo de Google nativa, la abre directo
     ssOrigen = SpreadsheetApp.openById(ultimoArchivo.getId());
   }
   
   const hojaOrigen = ssOrigen.getSheets()[0];
   const datosOrigen = hojaOrigen.getDataRange().getValues();
   
-  // Abrir u obtener la hoja de destino actual ("Liga Sur Fichados")
   const ssDestino = SpreadsheetApp.getActiveSpreadsheet();
   let hojaDestino = ssDestino.getSheetByName(nombreHojaDestino);
   if (!hojaDestino) {
     hojaDestino = ssDestino.insertSheet(nombreHojaDestino);
   }
   
-  // --- LÓGICA PARA NO BORRAR TUS ANOTACIONES MANUALEZ ---
+  // --- DETECTAR SI LA HOJA DESTINO ESTÁ VACÍA PARA CREAR ENCABEZADOS ---
+  let ultimaFilaDestino = hojaDestino.getLastRow();
+  const esHojaVacia = (ultimaFilaDestino === 0 || (ultimaFilaDestino === 1 && hojaDestino.getRange(1,1).getValue() === ""));
+
+  if (esHojaVacia) {
+    // La fila 5 del origen contiene los títulos de columnas (índice 4 en la matriz)
+    const filaEncabezadosOrigen = datosOrigen[4]; 
+    const nuevosEncabezados = [];
+    
+    columnasAMantener.forEach(col => {
+      nuevosEncabezados.push(filaEncabezadosOrigen[col - 1]);
+    });
+    
+    // Escribe la fila de títulos en la primera línea
+    hojaDestino.getRange(1, 1, 1, nuevosEncabezados.length).setValues([nuevosEncabezados]);
+    ultimaFilaDestino = 1; // Actualizamos para que los jugadores empiecen en la fila 2
+  }
+
+  // --- CONTROL DE DUPLICADOS POR DNI ---
   const datosDestinoExistentes = hojaDestino.getDataRange().getValues();
   const dnisExistentes = [];
-  
-  // Buscamos en qué posición del array quedó el DNI (el número 5 es índice 4)
   const indiceDniEnDestino = columnasAMantener.indexOf(5); 
 
   if (datosDestinoExistentes.length > 0 && datosDestinoExistentes[0][0] !== "") {
@@ -134,14 +146,12 @@ function procesarUltimoArchivoSur(carpetaId, nombreCarpeta, nombreHojaDestino, f
 
   const nuevosJugadores = [];
   
-  // Procesar las filas del archivo de origen
   for (let i = filaInicio - 1; i < datosOrigen.length; i++) {
     const fila = datosOrigen[i];
     
-    const valorColumnaV = fila[21] ? fila[21].toString() : ""; // Columna V es índice 21
-    const dniOrigen = fila[4] ? fila[4].toString().trim() : "";  // Columna E es índice 4
+    const valorColumnaV = fila[21] ? fila[21].toString() : ""; 
+    const dniOrigen = fila[4] ? fila[4].toString().trim() : "";  
     
-    // Si es del Sur y el DNI NO existe en tu hoja manual, lo preparamos para agregar
     if (valorColumnaV.includes("Sur") && dniOrigen !== "" && !dnisExistentes.includes(dniOrigen)) {
       const nuevaFila = [];
       columnasAMantener.forEach(col => {
@@ -151,22 +161,24 @@ function procesarUltimoArchivoSur(carpetaId, nombreCarpeta, nombreHojaDestino, f
     }
   }
   
-  // --- PEGAR SOLO LOS NUEVOS AL FINAL ---
+  // --- PEGAR LOS NUEVOS JUGADORES JUSTO DEBAJO ---
   if (nuevosJugadores.length > 0) {
-    let ultimaFilaDestino = hojaDestino.getLastRow();
-    let filaInsercion = (ultimaFilaDestino === 0 || (ultimaFilaDestino === 1 && hojaDestino.getRange(1,1).getValue() === "")) ? 1 : ultimaFilaDestino + 1;
-    
+    let filaInsercion = ultimaFilaDestino + 1;
     hojaDestino.getRange(filaInsercion, 1, nuevosJugadores.length, nuevosJugadores[0].length).setValues(nuevosJugadores);
-    Logger.log("Se agregaron " + nuevosJugadores.length + " nuevos jugadores.");
+    Logger.log("Se insertaron " + nuevosJugadores.length + " nuevos jugadores en Liga Sur Fichados.");
   } else {
-    Logger.log("No se encontraron nuevos jugadores para agregar.");
+    Logger.log("No se encontraron jugadores nuevos de la Liga Sur para anexar.");
   }
 
-  // --- LIMPIEZA: Si creamos un archivo temporal convertido, lo eliminamos para no duplicar datos ---
   if (archivoTemporalId) {
-    Drive.Files.remove(archivoTemporalId);
+    try {
+      Drive.Files.deleteResource(archivoTemporalId);
+    } catch (e) {
+      Logger.log("Aviso: No se pudo limpiar el archivo temporal automáticamente: " + e.toString());
+    }
   }
 }
+
 
 function actualizarAntiguedadDeuda() {
   const nombreCarpeta = "AntiguedaddeDeuda";
@@ -176,9 +188,7 @@ function actualizarAntiguedadDeuda() {
   procesarUltimoArchivo(CARPETA_RAIZ_ID, nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener, false);
 }
 
-/**
- * NUEVA FUNCIÓN: Procesa la carpeta de Matrículas invirtiendo el signo de los números
- */
+
 function actualizarMatriculas() {
   const nombreHojaDestino = "Matriculas";
   // Mantiene la misma estructura de columnas y fila de inicio que AntiguedaddeDeuda
