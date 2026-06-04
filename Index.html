@@ -255,6 +255,17 @@
               <option value="">Cargando listado...</option>
             </select>
           </div>
+
+          <div class="text-center mt-2 mb-1 d-flex flex-wrap justify-content-center gap-1">
+            <button id="btnTodo" class="btn btn-sm btn-dark active" onclick="filtrarPorEstado('todos')">👥 Plantel Completo</button>
+            <button id="btnDebe1" class="btn btn-sm btn-outline-dark" onclick="filtrarPorEstado('debe1')">⚠️ Debe 1 Cuota</button>
+            <button id="btnDebe2" class="btn btn-sm btn-outline-dark" onclick="filtrarPorEstado('debe2')">🚨 Debe ≥ 2 Cuotas</button>
+            <button id="btnDebeMatricula" class="btn btn-sm btn-outline-danger" onclick="filtrarPorEstado('debeMatricula')">📋 Debe Matrícula</button>
+          </div>
+        </div>
+      </div>
+    </div>
+          </div>
           
           <div id="seccionFiltros" class="text-center grupo-filtros mt-2" style="display: none;">
             <div class="d-flex flex-wrap justify-content-center gap-2">
@@ -490,43 +501,30 @@
         document.title = tituloOriginal;
       }
       function filtrarPorEstado(estado) {
-  // 1. Manejo visual de botones activos/inactivos
-  document.getElementById('btnTodo').classList.remove('active', 'btn-dark');
-  document.getElementById('btnTodo').classList.add('btn-outline-dark');
-  document.getElementById('btnDebe1').classList.remove('active', 'btn-dark');
-  document.getElementById('btnDebe1').classList.add('btn-outline-dark');
-  document.getElementById('btnDebe2').classList.remove('active', 'btn-dark');
-  document.getElementById('btnDebe2').classList.add('btn-outline-dark');
-  document.getElementById('btnDebeMatricula').classList.remove('active', 'btn-danger');
-  document.getElementById('btnDebeMatricula').classList.add('btn-outline-danger');
+  // Manejo de estados visuales de los botones
+  document.getElementById('btnTodo').className = 'btn btn-sm ' + (estado === 'todos' ? 'btn-dark active' : 'btn-outline-dark');
+  document.getElementById('btnDebe1').className = 'btn btn-sm ' + (estado === 'debe1' ? 'btn-dark active' : 'btn-outline-dark');
+  document.getElementById('btnDebe2').className = 'btn btn-sm ' + (estado === 'debe2' ? 'btn-dark active' : 'btn-outline-dark');
+  document.getElementById('btnDebeMatricula').className = 'btn btn-sm ' + (estado === 'debeMatricula' ? 'btn-danger active' : 'btn-outline-danger');
 
-  // 2. Filtrado lógico de los datos
   let listaFiltrada = [];
   
   if (estado === 'todos') {
-    document.getElementById('btnTodo').classList.add('active', 'btn-dark');
     listaFiltrada = jugadoresDeLaDivisionActual;
   } 
   else if (estado === 'debe1') {
-    document.getElementById('btnDebe1').classList.add('active', 'btn-dark');
     listaFiltrada = jugadoresDeLaDivisionActual.filter(j => !j.alerta && j.total > 0);
   } 
   else if (estado === 'debe2') {
-    document.getElementById('btnDebe2').classList.add('active', 'btn-dark');
     listaFiltrada = jugadoresDeLaDivisionActual.filter(j => j.alerta);
   } 
-  // NUEVA CONDICIÓN COMPROBATORIA DE MATRÍCULA
   else if (estado === 'debeMatricula') {
-    document.getElementById('btnDebeMatricula').classList.add('active', 'btn-danger');
     listaFiltrada = jugadoresDeLaDivisionActual.filter(j => j.matricula > 0);
   }
 
-  // 3. Volvemos a pintar las tarjetas con el recorte seleccionado
-  // Nota: Asegúrate de extraer de algún lado las etiquetas de los meses, o pásalas dinámicamente.
+  // Volvemos a renderizar las tarjetas recortadas
   renderizarTarjetas(listaFiltrada, ["May-26", "Abr-26", "Mar-26", "Feb-26", "Ene-26", "Dic-25", "180 Días"]);
 }
-
-// Función limpia para renderizar las tarjetas según la lista que reciba
 function renderizarTarjetas(jugadores, meses) {
   let contenedor = document.getElementById('contenedorTarjetas');
   contenedor.innerHTML = '';
