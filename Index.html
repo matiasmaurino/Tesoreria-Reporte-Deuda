@@ -441,24 +441,30 @@
           }
 
           divTarjeta.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <span class="fw-bold text-dark" style="font-size: 1.05rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
-              ${badgeEstadoHTML}
-            </div>
-            
-            <div class="row g-1 border-top pt-2 mt-1 text-start">
-              ${bloquesMesesHTML}
-            </div>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-bold text-dark" style="font-size: 1.05rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
+                ${j.alerta ? '<span class="badge-critico">🔴 Debe más de 2 meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
+              </div>
+              
+              <div class="row g-1 border-top pt-2 mt-1 text-start">
+                ${bloquesMesesHTML}
+                <div class="col-4 col-sm-3 mb-1">
+                  <span class="text-secondary" style="font-size: 0.72rem; font-weight: bold;">Matrícula</span><br>
+                  <span class="${j.matricula > 0 ? 'text-primary' : 'text-muted'}" style="font-size: 0.82rem; font-weight: 700;">
+                    ${formateador.format(j.matricula)}
+                  </span>
+                </div>
+              </div>
 
-            <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem;">
-              <div><strong>Forma de Pago:</strong> ${j.formaPago}</div>
-              ${bloqueDescuento}
-            </div>
+              <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem;">
+                <div><strong>Forma de Pago:</strong> ${j.formaPago}</div>
+                ${bloqueDescuento}
+              </div>
 
-            <div class="text-end fw-bold text-dark border-top pt-2 mt-2" style="font-size: 1.05rem;">
-              Total a Cobrar: <span class="${j.total > 0 ? 'monto-deuda' : 'text-success'}">${formateador.format(j.total)}</span>
-            </div>
-          `;
+              <div class="text-end fw-bold text-dark border-top pt-2 mt-2" style="font-size: 1.05rem;">
+                Total a Cobrar: <span class="monto-deuda">${formateador.format(j.total)}</span>
+              </div>
+            `;
           contenedor.appendChild(divTarjeta);
         });
         

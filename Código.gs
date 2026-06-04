@@ -199,14 +199,9 @@ function obtenerDeudasPorDivision(divisionBuscada) {
   if (!hojaReporte) return { nombresMeses: [], listaJugadores: [] };
   
   const datosReporte = hojaReporte.getDataRange().getValues();
-  // Extraer las etiquetas dinámicas de los 7 campos (Columnas M a S)
   let nombresMeses = [];
-  for (let col = 12; col <= 18; col++) { // Índices 12 (M) al 18 (S)
+  for (let col = 12; col <= 18; col++) { 
     let nombreHeader = datosReporte[0][col] ? datosReporte[0][col].toString().trim() : "Mes";
-    
-    // LIMPIEZA DE PARÉNTESIS: Quitamos los '(' y ')' con expresiones regulares
-    nombreHeader = nombreHeader.replace(/[\(\)]/g, "");
-    
     nombresMeses.push(nombreHeader);
   }
 
@@ -214,18 +209,24 @@ function obtenerDeudasPorDivision(divisionBuscada) {
   if (!divisionBuscada) return { nombresMeses: nombresMeses, listaJugadores: [] };
   let buscarLimpio = divisionBuscada.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-  // Recorremos la hoja desde la fila 2 para extraer los registros
   for (let k = 1; k < datosReporte.length; k++) {
     let filaR = datosReporte[k];
-    if (!filaR || filaR[7] === undefined) continue; // Columna H (Divisiones)
+    if (!filaR || filaR[7] === undefined) continue; 
     
     let divisionFilaLimpia = filaR[7].toString().toLowerCase().replace(/[^a-z0-9]/g, "");
     if (divisionFilaLimpia !== "" && divisionFilaLimpia.includes(buscarLimpio)) {
       
+      // Capturamos el Total de la Deuda de la columna U (Índice 20)
       let totalDeuda = parseFloat(filaR[20]) || 0; 
-      let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre"; // Columna T
       
-      // Reemplazo y simplificación de las Formas de Pago (Columna G)
+      // NUEVO: Capturamos el valor absoluto de la Matrícula de la columna X (Índice 23)
+      let matriculaValor = Math.abs(parseFloat(filaR[23])) || 0;
+      
+      // Filtro de visualización: si no debe nada ni tiene matrícula, pasamos de largo
+      if (totalDeuda <= 0 && matriculaValor <= 0) continue; 
+      
+      let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre";
+      
       let formaPagoRaw = filaR[6] ? filaR[6].toString().trim() : "-";
       let formaPago = formaPagoRaw;
       if (formaPagoRaw.includes("Entidad de Recaudación | Pagos Virtuales del Sur")) {
@@ -234,17 +235,15 @@ function obtenerDeudasPorDivision(divisionBuscada) {
         formaPago = "Tesoreria";
       }
       
-      let descuento = filaR[8] ? filaR[8].toString().trim() : ""; // Columna I
-      let periodoDesc = filaR[9] ? filaR[9].toString().trim() : ""; // Columna J
+      let descuento = filaR[8] ? filaR[8].toString().trim() : "";
+      let periodoDesc = filaR[9] ? filaR[9].toString().trim() : "";
       
-      // Capturar los valores de los 7 campos (Columnas M a S)
       let valoresMeses = [];
       let mesesConDeudaActiva = 0;
       
       for (let col = 12; col <= 18; col++) {
         let valorCelda = parseFloat(filaR[col]) || 0;
         valoresMeses.push(valorCelda);
-        
         if (valorCelda > 0) {
           mesesConDeudaActiva++;
         }
@@ -259,12 +258,12 @@ function obtenerDeudasPorDivision(divisionBuscada) {
         periodoDesc: periodoDesc,
         total: totalDeuda,
         valoresMeses: valoresMeses, 
-        alerta: alertaCritica
+        alerta: alertaCritica,
+        matricula: matriculaValor // <-- ENVIAMOS EL VALOR A LA INTERFAZ
       });
     }
   }
   
-  // Ordenar de mayor a menor monto de deuda acumulada
   listaJugadores.sort((a, b) => b.total - a.total);
   return {
     nombresMeses: nombresMeses,
