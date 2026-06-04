@@ -261,6 +261,7 @@
               <button id="btnFiltroTodo" class="btn btn-club-outline active" onclick="cambiarFiltroDeuda('todos')">👥 Plantel Completo</button>
               <button id="btnFiltroUno" class="btn btn-club-outline" onclick="cambiarFiltroDeuda('1cuota')">⚠️ Debe 1 Cuota</button>
               <button id="btnFiltroVarios" class="btn btn-club-outline" onclick="cambiarFiltroDeuda('2mas')">🚨 Debe ≥ 2 Cuotas</button>
+              <button id="btnDebeMatricula" class="btn btn-sm btn-outline-danger" onclick="filtrarPorEstado('debeMatricula')">📋 Debe Matrícula</button>
             </div>
           </div>
 
@@ -283,6 +284,7 @@
 
     <script>
       let todasLasDivisiones = [];
+      let jugadoresDeLaDivisionActual = []; 
       let datosActualesCache = null;
       let filtroMorosidadActual = 'todos'; 
 
@@ -343,12 +345,16 @@
         loader.style.display = 'block';
         
         google.script.run.withSuccessHandler(function(objetoContenedor) {
-          loader.style.display = 'none';
-          datosActualesCache = objetoContenedor;
-          filtroMorosidadActual = 'todos';
-          actualizarEstilosBotones();
-          renderizarTarjetasFiltradas();
-        }).obtenerDeudasPorDivision(division);
+  loader.style.display = 'none';
+  
+  let meses = objetoContenedor.nombresMeses;
+  // GUARDAMOS la lista original para poder usar los filtros libremente
+  jugadoresDeLaDivisionActual = objetoContenedor.listaJugadores; 
+  
+  // Dibujamos inicialmente el plantel completo
+  renderizarTarjetas(jugadoresDeLaDivisionActual, meses);
+  
+}).obtenerDeudasPorDivision(division);
       }
 
       function cambiarFiltroDeuda(tipoFiltro) {
@@ -483,6 +489,104 @@
         window.print();
         document.title = tituloOriginal;
       }
+      function filtrarPorEstado(estado) {
+  // 1. Manejo visual de botones activos/inactivos
+  document.getElementById('btnTodo').classList.remove('active', 'btn-dark');
+  document.getElementById('btnTodo').classList.add('btn-outline-dark');
+  document.getElementById('btnDebe1').classList.remove('active', 'btn-dark');
+  document.getElementById('btnDebe1').classList.add('btn-outline-dark');
+  document.getElementById('btnDebe2').classList.remove('active', 'btn-dark');
+  document.getElementById('btnDebe2').classList.add('btn-outline-dark');
+  document.getElementById('btnDebeMatricula').classList.remove('active', 'btn-danger');
+  document.getElementById('btnDebeMatricula').classList.add('btn-outline-danger');
+
+  // 2. Filtrado lógico de los datos
+  let listaFiltrada = [];
+  
+  if (estado === 'todos') {
+    document.getElementById('btnTodo').classList.add('active', 'btn-dark');
+    listaFiltrada = jugadoresDeLaDivisionActual;
+  } 
+  else if (estado === 'debe1') {
+    document.getElementById('btnDebe1').classList.add('active', 'btn-dark');
+    listaFiltrada = jugadoresDeLaDivisionActual.filter(j => !j.alerta && j.total > 0);
+  } 
+  else if (estado === 'debe2') {
+    document.getElementById('btnDebe2').classList.add('active', 'btn-dark');
+    listaFiltrada = jugadoresDeLaDivisionActual.filter(j => j.alerta);
+  } 
+  // NUEVA CONDICIÓN COMPROBATORIA DE MATRÍCULA
+  else if (estado === 'debeMatricula') {
+    document.getElementById('btnDebeMatricula').classList.add('active', 'btn-danger');
+    listaFiltrada = jugadoresDeLaDivisionActual.filter(j => j.matricula > 0);
+  }
+
+  // 3. Volvemos a pintar las tarjetas con el recorte seleccionado
+  // Nota: Asegúrate de extraer de algún lado las etiquetas de los meses, o pásalas dinámicamente.
+  renderizarTarjetas(listaFiltrada, ["May-26", "Abr-26", "Mar-26", "Feb-26", "Ene-26", "Dic-25", "180 Días"]);
+}
+
+// Función limpia para renderizar las tarjetas según la lista que reciba
+function renderizarTarjetas(jugadores, meses) {
+  let contenedor = document.getElementById('contenedorTarjetas');
+  contenedor.innerHTML = '';
+
+  if(jugadores.length === 0) {
+    contenedor.innerHTML = '<div class="alert alert-light text-center shadow-sm text-muted">No se registran jugadores bajo este filtro en la categoría.</div>';
+    return;
+  }
+
+  let formateador = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 });
+
+  jugadores.forEach(function(j) {
+    let divTarjeta = document.createElement('div');
+    divTarjeta.className = 'tarjeta-jugador' + (j.alerta ? ' tarjeta-alerta' : '');
+    
+    let bloqueDescuento = "";
+    if (j.descuento || j.periodoDesc) {
+      bloqueDescuento = `<div class="mt-1 text-dark small" style="font-size: 0.8rem;">🎁 <strong>Bonificación:</strong> ${j.descuento} ${j.periodoDesc}</div>`;
+    }
+
+    let bloquesMesesHTML = "";
+    for (let i = 0; i < meses.length; i++) {
+      let montoMes = j.valoresMeses[i];
+      let claseColor = montoMes > 0 ? 'monto-deuda' : 'text-success';
+      
+      bloquesMesesHTML += `
+        <div class="col-4 col-sm-3 mb-1">
+          <span class="text-muted" style="font-size: 0.72rem;">${meses[i]}</span><br>
+          <span class="${claseColor}" style="font-size: 0.82rem; font-weight: 600;">${formateador.format(montoMes)}</span>
+        </div>`;
+    }
+
+    divTarjeta.innerHTML = `
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="fw-bold text-dark" style="font-size: 1.05rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
+        ${j.alerta ? '<span class="badge-critico">🔴 Debe más de 2 meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
+      </div>
+      
+      <div class="row g-1 border-top pt-2 mt-1 text-start">
+        ${bloquesMesesHTML}
+        <div class="col-4 col-sm-3 mb-1">
+          <span class="text-secondary" style="font-size: 0.72rem; font-weight: bold;">Matrícula</span><br>
+          <span class="${j.matricula > 0 ? 'text-primary' : 'text-muted'}" style="font-size: 0.82rem; font-weight: 700;">
+            ${formateador.format(j.matricula)}
+          </span>
+        </div>
+      </div>
+
+      <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem;">
+        <div><strong>Forma de Pago:</strong> ${j.formaPago}</div>
+        ${bloqueDescuento}
+      </div>
+
+      <div class="text-end fw-bold text-dark border-top pt-2 mt-2" style="font-size: 1.05rem;">
+        Total a Cobrar: <span class="monto-deuda">${formateador.format(j.total)}</span>
+      </div>
+    `;
+    contenedor.appendChild(divTarjeta);
+  });
+}
     </script>
   </body>
 </html>
