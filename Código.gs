@@ -31,13 +31,10 @@ function actualizarTodo() {
     // 2. Ejecuta antigüedad de deuda
     actualizarAntiguedadDeuda();
     
-    // 3. Ejecuta la importación y conversión de Matrículas
+    // 3. NUEVO: Ejecuta la importación y conversión de Matrículas
     actualizarMatriculas();
-
-   // 4. Ejecuta la importación de Liga Sur sin alterar tus notas manuales en las filas viejas
-    actualizarSociosLigaSur();
     
-    ui.alert('Proceso completado', 'Se han actualizado los Socios, Deuda, Matrículas y los nuevos de Liga Sur correctamente. ✅', ui.ButtonSet.OK);
+    ui.alert('Proceso completado', 'Se han actualizado los Socios, la Antigüedad de Deuda y las Matrículas correctamente. ✅', ui.ButtonSet.OK);
   } catch (error) {
     ui.alert('Error', 'Hubo un problema durante la actualización: ' + error.toString(), ui.ButtonSet.OK);
   }
@@ -46,139 +43,10 @@ function actualizarTodo() {
 function actualizarSocios() {
   const nombreCarpeta = "Socios";
   const nombreHojaDestino = "Socios";
-  const columnasAMantener = [1, 2, 3, 4, 9, 11, 16, 22, 28, 29];
+  const columnasAMantener = [1, 2, 3, 5, 9, 11, 16, 22, 28, 29];
   const filaInicioOriginal = 6;
   procesarUltimoArchivo(CARPETA_RAIZ_ID, nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener, false);
 }
-
-// 1. NUEVA FUNCIÓN DISPARADORA (Se llama desde actualizarTodo)
-// 1. FUNCIÓN DISPARADORA (Asegúrate de llamarla en actualizarTodo)
-function actualizarSociosLigaSur() {
-  const nombreCarpeta = "Socios";
-  const nombreHojaDestino = "Liga Sur Fichados";
-  
-  // Incluye el número 5 que corresponde a la columna E (Nº Documento / DNI)
-  const columnasAMantener = [1, 2, 3, 4, 5, 9, 11, 16, 22, 28, 29];
-  const filaInicioOriginal = 6;
-  const carpetaSociosId = "1aHuI-BqErWxN_ShsStmwYOMtOGYbFFrl"; 
-  
-  procesarUltimoArchivoSur(carpetaSociosId, nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener);
-}
-
-// 2. FUNCIÓN DE PROCESAMIENTO ADAPTADA A DRIVE API V3
-function procesarUltimoArchivoSur(carpetaId, nombreCarpeta, nombreHojaDestino, filaInicio, columnasAMantener) {
-  const carpeta = DriveApp.getFolderById(carpetaId);
-  const archivos = carpeta.getFiles();
-  
-  let ultimoArchivo = null;
-  let ultimaFecha = new Date(0);
-  
-  while (archivos.hasNext()) {
-    const archivo = archivos.next();
-    if (archivo.getDateCreated() > ultimaFecha) {
-      ultimaFecha = archivo.getDateCreated();
-      ultimoArchivo = archivo;
-    }
-  }
-  
-  if (!ultimoArchivo) {
-    Logger.log("No se encontraron archivos en la carpeta Socios.");
-    return;
-  }
-  
-  let ssOrigen;
-  let archivoTemporalId = null;
-  const mimeType = ultimoArchivo.getMimeType();
-
-  if (mimeType === MimeType.MICROSOFT_EXCEL || mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || ultimoArchivo.getName().endsWith('.xls')) {
-    const recursoArchivo = {
-      name: "Temporal_Sur_" + ultimoArchivo.getName().replace(/\.[^/.]+$/, ""),
-      mimeType: "application/vnd.google-apps.spreadsheet",
-      parents: [carpetaId]
-    };
-    
-    const archivoConvertido = Drive.Files.create(recursoArchivo, ultimoArchivo.getBlob());
-    archivoTemporalId = archivoConvertido.id;
-    ssOrigen = SpreadsheetApp.openById(archivoTemporalId);
-  } else {
-    ssOrigen = SpreadsheetApp.openById(ultimoArchivo.getId());
-  }
-  
-  const hojaOrigen = ssOrigen.getSheets()[0];
-  const datosOrigen = hojaOrigen.getDataRange().getValues();
-  
-  const ssDestino = SpreadsheetApp.getActiveSpreadsheet();
-  let hojaDestino = ssDestino.getSheetByName(nombreHojaDestino);
-  if (!hojaDestino) {
-    hojaDestino = ssDestino.insertSheet(nombreHojaDestino);
-  }
-  
-  // --- DETECTAR SI LA HOJA DESTINO ESTÁ VACÍA PARA CREAR ENCABEZADOS ---
-  let ultimaFilaDestino = hojaDestino.getLastRow();
-  const esHojaVacia = (ultimaFilaDestino === 0 || (ultimaFilaDestino === 1 && hojaDestino.getRange(1,1).getValue() === ""));
-
-  if (esHojaVacia) {
-    // La fila 5 del origen contiene los títulos de columnas (índice 4 en la matriz)
-    const filaEncabezadosOrigen = datosOrigen[4]; 
-    const nuevosEncabezados = [];
-    
-    columnasAMantener.forEach(col => {
-      nuevosEncabezados.push(filaEncabezadosOrigen[col - 1]);
-    });
-    
-    // Escribe la fila de títulos en la primera línea
-    hojaDestino.getRange(1, 1, 1, nuevosEncabezados.length).setValues([nuevosEncabezados]);
-    ultimaFilaDestino = 1; // Actualizamos para que los jugadores empiecen en la fila 2
-  }
-
-  // --- CONTROL DE DUPLICADOS POR DNI ---
-  const datosDestinoExistentes = hojaDestino.getDataRange().getValues();
-  const dnisExistentes = [];
-  const indiceDniEnDestino = columnasAMantener.indexOf(5); 
-
-  if (datosDestinoExistentes.length > 0 && datosDestinoExistentes[0][0] !== "") {
-    datosDestinoExistentes.forEach(filaDestino => {
-      if (filaDestino[indiceDniEnDestino]) {
-        dnisExistentes.push(filaDestino[indiceDniEnDestino].toString().trim());
-      }
-    });
-  }
-
-  const nuevosJugadores = [];
-  
-  for (let i = filaInicio - 1; i < datosOrigen.length; i++) {
-    const fila = datosOrigen[i];
-    
-    const valorColumnaV = fila[21] ? fila[21].toString() : ""; 
-    const dniOrigen = fila[4] ? fila[4].toString().trim() : "";  
-    
-    if (valorColumnaV.includes("Sur") && dniOrigen !== "" && !dnisExistentes.includes(dniOrigen)) {
-      const nuevaFila = [];
-      columnasAMantener.forEach(col => {
-        nuevaFila.push(fila[col - 1]);
-      });
-      nuevosJugadores.push(nuevaFila);
-    }
-  }
-  
-  // --- PEGAR LOS NUEVOS JUGADORES JUSTO DEBAJO ---
-  if (nuevosJugadores.length > 0) {
-    let filaInsercion = ultimaFilaDestino + 1;
-    hojaDestino.getRange(filaInsercion, 1, nuevosJugadores.length, nuevosJugadores[0].length).setValues(nuevosJugadores);
-    Logger.log("Se insertaron " + nuevosJugadores.length + " nuevos jugadores en Liga Sur Fichados.");
-  } else {
-    Logger.log("No se encontraron jugadores nuevos de la Liga Sur para anexar.");
-  }
-
-  if (archivoTemporalId) {
-    try {
-      Drive.Files.deleteResource(archivoTemporalId);
-    } catch (e) {
-      Logger.log("Aviso: No se pudo limpiar el archivo temporal automáticamente: " + e.toString());
-    }
-  }
-}
-
 
 function actualizarAntiguedadDeuda() {
   const nombreCarpeta = "AntiguedaddeDeuda";
@@ -188,7 +56,9 @@ function actualizarAntiguedadDeuda() {
   procesarUltimoArchivo(CARPETA_RAIZ_ID, nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener, false);
 }
 
-
+/**
+ * NUEVA FUNCIÓN: Procesa la carpeta de Matrículas invirtiendo el signo de los números
+ */
 function actualizarMatriculas() {
   const nombreHojaDestino = "Matriculas";
   // Mantiene la misma estructura de columnas y fila de inicio que AntiguedaddeDeuda
@@ -331,8 +201,7 @@ function obtenerDeudasPorDivision(divisionBuscada) {
   const datosReporte = hojaReporte.getDataRange().getValues();
   let nombresMeses = [];
   for (let col = 12; col <= 18; col++) { 
-    let nombreHeader = datosReporte[0][col] ? datosReporte[0][col].toString().trim() : "Mes";
-    nombresMeses.push(nombreHeader);
+    nombresMeses.push(datosReporte[0][col] ? datosReporte[0][col].toString().trim() : "Mes");
   }
 
   let listaJugadores = [];
@@ -346,40 +215,29 @@ function obtenerDeudasPorDivision(divisionBuscada) {
     let divisionFilaLimpia = filaR[7].toString().toLowerCase().replace(/[^a-z0-9]/g, "");
     if (divisionFilaLimpia !== "" && divisionFilaLimpia.includes(buscarLimpio)) {
       
-      // Capturamos el Total de la Deuda de la columna U (Índice 20)
       let totalDeuda = parseFloat(filaR[20]) || 0; 
+      let matriculaValor = Math.abs(parseFloat(filaR[23])) || 0; // Columna X
       
-      // NUEVO: Capturamos el valor absoluto de la Matrícula de la columna X (Índice 23)
-      let matriculaValor = Math.abs(parseFloat(filaR[23])) || 0;
-      
-      // Filtro de visualización: si no debe nada ni tiene matrícula, pasamos de largo
       if (totalDeuda <= 0 && matriculaValor <= 0) continue; 
       
       let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre";
-      
       let formaPagoRaw = filaR[6] ? filaR[6].toString().trim() : "-";
-      let formaPago = formaPagoRaw;
-      if (formaPagoRaw.includes("Entidad de Recaudación | Pagos Virtuales del Sur")) {
-        formaPago = "Debito Automatico";
-      } else if (formaPagoRaw.includes("Administración/Secretaría")) {
-        formaPago = "Tesoreria";
-      }
+      let formaPago = formaPagoRaw.includes("Entidad de Recaudación") ? "Debito Automatico" : "Tesoreria";
       
       let descuento = filaR[8] ? filaR[8].toString().trim() : "";
       let periodoDesc = filaR[9] ? filaR[9].toString().trim() : "";
       
       let valoresMeses = [];
-      let mesesConDeudaActiva = 0;
-      
       for (let col = 12; col <= 18; col++) {
-        let valorCelda = parseFloat(filaR[col]) || 0;
-        valoresMeses.push(valorCelda);
-        if (valorCelda > 0) {
-          mesesConDeudaActiva++;
-        }
+        valoresMeses.push(parseFloat(filaR[col]) || 0);
       }
       
-      let alertaCritica = (mesesConDeudaActiva > 2);
+      // NUEVA LÓGICA DIRECTA DESDE LA PLANILLA:
+      // Leemos la columna U ("CUANTOS MESES DEBE"), que es el índice 21 en la fila.
+      let mesesDebidosPlanilla = parseInt(filaR[21]) || 0;
+      
+      // Si el número en la planilla es 2 o más, se activa la alerta crítica automáticamente
+      let alertaCritica = (mesesDebidosPlanilla >= 2);
       
       listaJugadores.push({
         nombre: nombre,
@@ -389,17 +247,15 @@ function obtenerDeudasPorDivision(divisionBuscada) {
         total: totalDeuda,
         valoresMeses: valoresMeses, 
         alerta: alertaCritica,
-        matricula: matriculaValor // <-- ENVIAMOS EL VALOR A LA INTERFAZ
+        matricula: matriculaValor
       });
     }
   }
   
   listaJugadores.sort((a, b) => b.total - a.total);
-  return {
-    nombresMeses: nombresMeses,
-    listaJugadores: listaJugadores
-  };
+  return { nombresMeses: nombresMeses, listaJugadores: listaJugadores };
 }
+
 function enviarMailsDeudores() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
   const hojaDeuda = ss.getSheetByName('AntiguedaddeDeuda');
