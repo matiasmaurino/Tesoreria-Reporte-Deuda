@@ -1,4 +1,3 @@
- xd<!DOCTYPE html>
 <html>
   <head>
     <base target="_top">
@@ -150,26 +149,23 @@
         box-shadow: 0 0 0 0.25rem rgba(254, 203, 0, 0.25);
       }
 
-      /* BOTÓN DESCARGAR PDF FLOTANTE */
-      .btn-pdf-flotante {
-        position: fixed;
-        bottom: 25px;
-        right: 25px;
+      /* BOTÓN DESCARGAR PDF GENERAL SUPERIOR */
+      .btn-pdf-general-superior {
         background: #111111;
         color: #fecb00;
         border: 2px solid #fecb00;
-        padding: 12px 20px;
-        border-radius: 30px;
+        padding: 10px 20px;
+        border-radius: 12px;
         font-weight: bold;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        z-index: 2000;
         transition: all 0.2s ease;
-        display: none; 
+        width: 100%;
+        max-width: 400px;
+        margin: 10px auto 0 auto;
+        display: none;
       }
-      .btn-pdf-flotante:hover {
+      .btn-pdf-general-superior:hover {
         background: #fecb00;
         color: #111111;
-        transform: scale(1.05);
       }
 
       /* ==========================================
@@ -180,31 +176,12 @@
           background-color: #ffffff !important;
           font-size: 11pt;
         }
-        .btn-pdf-flotante, 
-        #loader {
+        #btnPdf, 
+        .btn-pdf-general-superior,
+        #loader,
+        .contenedor-fijo,
+        .btn-light {
           display: none !important;
-        }
-        .contenedor-fijo .container {
-          display: block !important;
-          margin-bottom: 15px;
-        }
-        .contenedor-fijo {
-          position: relative !important;
-          box-shadow: none !important;
-          padding-bottom: 0 !important;
-          background-color: #ffffff !important;
-        }
-        .header-club {
-          background: #111111 !important;
-          color: #ffffff !important;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
-          border-bottom: 4px solid #fecb00 !important;
-          padding: 15px !important;
-          margin-bottom: 10px;
-        }
-        .titulo-panel {
-          color: #fecb00 !important;
         }
         .tarjeta-jugador {
           page-break-inside: avoid;
@@ -215,6 +192,7 @@
           background: #ffffff !important;
           -webkit-print-color-adjust: exact;
           print-color-adjust: exact;
+          margin-bottom: 20px;
         }
         .tarjeta-advertencia {
           border-left: 6px solid #ffc107 !important;
@@ -256,31 +234,23 @@
             </select>
           </div>
 
-          <div class="text-center mt-2 mb-1 d-flex flex-wrap justify-content-center gap-1">
+          <div id="seccionFiltrosPrincipal" class="text-center mt-2 mb-1 d-flex flex-wrap justify-content-center gap-1">
             <button id="btnTodo" class="btn btn-sm btn-dark active" onclick="filtrarPorEstado('todos')">👥 Plantel Completo</button>
             <button id="btnDebe1" class="btn btn-sm btn-outline-dark" onclick="filtrarPorEstado('debe1')">⚠️ Debe 1 Cuota</button>
             <button id="btnDebe2" class="btn btn-sm btn-outline-dark" onclick="filtrarPorEstado('debe2')">🚨 Debe ≥ 2 Cuotas</button>
             <button id="btnDebeMatricula" class="btn btn-sm btn-outline-danger" onclick="filtrarPorEstado('debeMatricula')">📋 Debe Matrícula</button>
           </div>
-        </div>
-      </div>
-    </div>
-          </div>
-          
-          <div id="seccionFiltros" class="text-center grupo-filtros mt-2" style="display: none;">
-            <div class="d-flex flex-wrap justify-content-center gap-2">
-              <button id="btnFiltroTodo" class="btn btn-club-outline active" onclick="cambiarFiltroDeuda('todos')">👥 Plantel Completo</button>
-              <button id="btnFiltroUno" class="btn btn-club-outline" onclick="cambiarFiltroDeuda('1cuota')">⚠️ Debe 1 Cuota</button>
-              <button id="btnFiltroVarios" class="btn btn-club-outline" onclick="cambiarFiltroDeuda('2mas')">🚨 Debe ≥ 2 Cuotas</button>
-              <button id="btnDebeMatricula" class="btn btn-sm btn-outline-danger" onclick="filtrarPorEstado('debeMatricula')">📋 Debe Matrícula</button>
-            </div>
-          </div>
 
+          <div class="text-center">
+            <button id="btnPdfGeneralSuperior" class="btn btn-pdf-general-superior" onclick="descargarPDF()">
+              Descargar Plantel Completo en PDF 📄
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
-    <button id="btnPdf" class="btn-pdf-flotante" onclick="descargarPDF()">
+    <button id="btnPdf" style="display:none;" onclick="descargarPDF()">
       📄 Descargar PDF
     </button>
 
@@ -318,14 +288,15 @@
         });
       }
 
+      // Ajustado para que resguarde las llamadas originales sin romper lógica de caché
       function filtrarDivisiones() {
         let textoBuscado = document.getElementById('buscarDivision').value.toLowerCase().trim();
         let contenedor = document.getElementById('contenedorTarjetas');
-        let seccionFiltros = document.getElementById('seccionFiltros');
         let btnPdf = document.getElementById('btnPdf');
+        let btnPdfGeneralSuperior = document.getElementById('btnPdfGeneralSuperior');
         contenedor.innerHTML = '';
-        seccionFiltros.style.display = 'none';
         btnPdf.style.display = 'none';
+        if(btnPdfGeneralSuperior) btnPdfGeneralSuperior.style.display = 'none';
         datosActualesCache = null;
         
         let divisionesFiltradas = todasLasDivisiones.filter(function(div) {
@@ -339,33 +310,33 @@
         let division = document.getElementById('selectDivision').value;
         let contenedor = document.getElementById('contenedorTarjetas');
         let loader = document.getElementById('loader');
-        let seccionFiltros = document.getElementById('seccionFiltros');
         let btnPdf = document.getElementById('btnPdf');
+        let btnPdfGeneralSuperior = document.getElementById('btnPdfGeneralSuperior');
         
         if (!division) {
           contenedor.innerHTML = '';
-          seccionFiltros.style.display = 'none';
           btnPdf.style.display = 'none';
+          if(btnPdfGeneralSuperior) btnPdfGeneralSuperior.style.display = 'none';
           datosActualesCache = null;
           return;
         }
         
         contenedor.innerHTML = '';
-        seccionFiltros.style.display = 'none';
         btnPdf.style.display = 'none';
+        if(btnPdfGeneralSuperior) btnPdfGeneralSuperior.style.display = 'none';
         loader.style.display = 'block';
         
         google.script.run.withSuccessHandler(function(objetoContenedor) {
-  loader.style.display = 'none';
-  
-  let meses = objetoContenedor.nombresMeses;
-  // GUARDAMOS la lista original para poder usar los filtros libremente
-  jugadoresDeLaDivisionActual = objetoContenedor.listaJugadores; 
-  
-  // Dibujamos inicialmente el plantel completo
-  renderizarTarjetas(jugadoresDeLaDivisionActual, meses);
-  
-}).obtenerDeudasPorDivision(division);
+          loader.style.display = 'none';
+          
+          let meses = objetoContenedor.nombresMeses;
+          datosActualesCache = objetoContenedor;
+          jugadoresDeLaDivisionActual = objetoContenedor.listaJugadores; 
+          
+          if(btnPdfGeneralSuperior) btnPdfGeneralSuperior.style.display = 'block';
+          
+          renderizarTarjetas(jugadoresDeLaDivisionActual, meses);
+        }).obtenerDeudasPorDivision(division);
       }
 
       function cambiarFiltroDeuda(tipoFiltro) {
@@ -375,18 +346,21 @@
       }
 
       function actualizarEstilosBotones() {
-        document.getElementById('btnFiltroTodo').classList.remove('active');
-        document.getElementById('btnFiltroUno').classList.remove('active');
-        document.getElementById('btnFiltroVarios').classList.remove('active');
+        // Mantenemos estas referencias vacías para evitar errores de consola si la caché los invoca
+        let b1 = document.getElementById('btnFiltroTodo');
+        let b2 = document.getElementById('btnFiltroUno');
+        let b3 = document.getElementById('btnFiltroVarios');
+        if(b1) b1.classList.remove('active');
+        if(b2) b2.classList.remove('active');
+        if(b3) b3.classList.remove('active');
         
-        if (filtroMorosidadActual === 'todos') document.getElementById('btnFiltroTodo').classList.add('active');
-        if (filtroMorosidadActual === '1cuota') document.getElementById('btnFiltroUno').classList.add('active');
-        if (filtroMorosidadActual === '2mas') document.getElementById('btnFiltroVarios').classList.add('active');
+        if (filtroMorosidadActual === 'todos' && b1) b1.classList.add('active');
+        if (filtroMorosidadActual === '1cuota' && b2) b2.classList.add('active');
+        if (filtroMorosidadActual === '2mas' && b3) b3.classList.add('active');
       }
 
       function renderizarTarjetasFiltradas() {
         let contenedor = document.getElementById('contenedorTarjetas');
-        let seccionFiltros = document.getElementById('seccionFiltros');
         let btnPdf = document.getElementById('btnPdf');
         contenedor.innerHTML = '';
         
@@ -400,13 +374,9 @@
         
         if (jugadores.length === 0) {
           contenedor.innerHTML = '<div class="alert alert-light text-center shadow-sm text-muted">No se registran jugadores activos en esta categoría.</div>';
-          seccionFiltros.style.display = 'none';
           btnPdf.style.display = 'none';
           return;
         }
-        
-        seccionFiltros.style.display = 'block';
-        btnPdf.style.display = 'block'; 
         
         let formateador = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 });
         let contadorVisualizados = 0;
@@ -424,7 +394,6 @@
           
           let divTarjeta = document.createElement('div');
           
-          // Asignación de clases dinámicas según morosidad real
           let claseBorde = '';
           if (mesesDebidos === 1) {
             claseBorde = ' tarjeta-advertencia';
@@ -450,13 +419,6 @@
               </div>`;
           }
 
-          let badgeEstadoHTML = '<span class="badge-regular">✓ Regular / Al Día</span>';
-          if (mesesDebidos === 1) {
-            badgeEstadoHTML = '<span class="badge-cuota-unica">⚠️ Debe 1 mes</span>';
-          } else if (mesesDebidos >= 2) {
-            badgeEstadoHTML = `<span class="badge-critico">🔴 Debe ${mesesDebidos} meses</span>`;
-          }
-
           divTarjeta.innerHTML = `
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <span class="fw-bold text-dark" style="font-size: 1.05rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
@@ -478,8 +440,11 @@
                 ${bloqueDescuento}
               </div>
 
-              <div class="text-end fw-bold text-dark border-top pt-2 mt-2" style="font-size: 1.05rem;">
-                Total a Cobrar: <span class="monto-deuda">${formateador.format(j.total)}</span>
+              <div class="d-flex justify-content-between align-items-center border-top pt-2 mt-2">
+                <button class="btn btn-sm btn-light border" style="font-size: 0.8rem; font-weight: 600;" onclick="descargarFichaPDF(this)">Descargar Ficha PDF 📄</button>
+                <div class="text-end fw-bold text-dark" style="font-size: 1.05rem;">
+                  Total a Cobrar: <span class="monto-deuda">${formateador.format(j.total)}</span>
+                </div>
               </div>
             `;
           contenedor.appendChild(divTarjeta);
@@ -500,91 +465,129 @@
         window.print();
         document.title = tituloOriginal;
       }
+
       function filtrarPorEstado(estado) {
-  // Manejo de estados visuales de los botones
-  document.getElementById('btnTodo').className = 'btn btn-sm ' + (estado === 'todos' ? 'btn-dark active' : 'btn-outline-dark');
-  document.getElementById('btnDebe1').className = 'btn btn-sm ' + (estado === 'debe1' ? 'btn-dark active' : 'btn-outline-dark');
-  document.getElementById('btnDebe2').className = 'btn btn-sm ' + (estado === 'debe2' ? 'btn-dark active' : 'btn-outline-dark');
-  document.getElementById('btnDebeMatricula').className = 'btn btn-sm ' + (estado === 'debeMatricula' ? 'btn-danger active' : 'btn-outline-danger');
+        document.getElementById('btnTodo').className = 'btn btn-sm ' + (estado === 'todos' ? 'btn-dark active' : 'btn-outline-dark');
+        document.getElementById('btnDebe1').className = 'btn btn-sm ' + (estado === 'debe1' ? 'btn-dark active' : 'btn-outline-dark');
+        document.getElementById('btnDebe2').className = 'btn btn-sm ' + (estado === 'debe2' ? 'btn-dark active' : 'btn-outline-dark');
+        document.getElementById('btnDebeMatricula').className = 'btn btn-sm ' + (estado === 'debeMatricula' ? 'btn-danger active' : 'btn-outline-danger');
 
-  let listaFiltrada = [];
-  
-  if (estado === 'todos') {
-    listaFiltrada = jugadoresDeLaDivisionActual;
-  } 
-  else if (estado === 'debe1') {
-    listaFiltrada = jugadoresDeLaDivisionActual.filter(j => !j.alerta && j.total > 0);
-  } 
-  else if (estado === 'debe2') {
-    listaFiltrada = jugadoresDeLaDivisionActual.filter(j => j.alerta);
-  } 
-  else if (estado === 'debeMatricula') {
-    listaFiltrada = jugadoresDeLaDivisionActual.filter(j => j.matricula > 0);
-  }
+        let listaFiltrada = [];
+        
+        if (estado === 'todos') {
+          listaFiltrada = jugadoresDeLaDivisionActual;
+        } 
+        else if (estado === 'debe1') {
+          listaFiltrada = jugadoresDeLaDivisionActual.filter(j => !j.alerta && j.total > 0);
+        } 
+        else if (estado === 'debe2') {
+          listaFiltrada = jugadoresDeLaDivisionActual.filter(j => j.alerta);
+        } 
+        else if (estado === 'debeMatricula') {
+          listaFiltrada = jugadoresDeLaDivisionActual.filter(j => j.matricula > 0);
+        }
 
-  // Volvemos a renderizar las tarjetas recortadas
-  renderizarTarjetas(listaFiltrada, ["May-26", "Abr-26", "Mar-26", "Feb-26", "Ene-26", "Dic-25", "180 Días"]);
-}
-function renderizarTarjetas(jugadores, meses) {
-  let contenedor = document.getElementById('contenedorTarjetas');
-  contenedor.innerHTML = '';
+        renderizarTarjetas(listaFiltrada, ["May-26", "Abr-26", "Mar-26", "Feb-26", "Ene-26", "Dic-25", "180 Días"]);
+      }
 
-  if(jugadores.length === 0) {
-    contenedor.innerHTML = '<div class="alert alert-light text-center shadow-sm text-muted">No se registran jugadores bajo este filtro en la categoría.</div>';
-    return;
-  }
+      function renderizarTarjetas(jugadores, meses) {
+        let contenedor = document.getElementById('contenedorTarjetas');
+        contenedor.innerHTML = '';
 
-  let formateador = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 });
+        if(jugadores.length === 0) {
+          contenedor.innerHTML = '<div class="alert alert-light text-center shadow-sm text-muted">No se registran jugadores bajo este filtro en la categoría.</div>';
+          return;
+        }
 
-  jugadores.forEach(function(j) {
-    let divTarjeta = document.createElement('div');
-    divTarjeta.className = 'tarjeta-jugador' + (j.alerta ? ' tarjeta-alerta' : '');
-    
-    let bloqueDescuento = "";
-    if (j.descuento || j.periodoDesc) {
-      bloqueDescuento = `<div class="mt-1 text-dark small" style="font-size: 0.8rem;">🎁 <strong>Bonificación:</strong> ${j.descuento} ${j.periodoDesc}</div>`;
-    }
+        let formateador = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 });
 
-    let bloquesMesesHTML = "";
-    for (let i = 0; i < meses.length; i++) {
-      let montoMes = j.valoresMeses[i];
-      let claseColor = montoMes > 0 ? 'monto-deuda' : 'text-success';
-      
-      bloquesMesesHTML += `
-        <div class="col-4 col-sm-3 mb-1">
-          <span class="text-muted" style="font-size: 0.72rem;">${meses[i]}</span><br>
-          <span class="${claseColor}" style="font-size: 0.82rem; font-weight: 600;">${formateador.format(montoMes)}</span>
-        </div>`;
-    }
+        jugadores.forEach(function(j) {
+          let divTarjeta = document.createElement('div');
+          divTarjeta.className = 'tarjeta-jugador' + (j.alerta ? ' tarjeta-alerta' : '');
+          
+          let bloqueDescuento = "";
+          if (j.descuento || j.periodoDesc) {
+            bloqueDescuento = `<div class="mt-1 text-dark small" style="font-size: 0.8rem;">🎁 <strong>Bonificación:</strong> ${j.descuento} ${j.periodoDesc}</div>`;
+          }
 
-    divTarjeta.innerHTML = `
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <span class="fw-bold text-dark" style="font-size: 1.05rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
-        ${j.alerta ? '<span class="badge-critico">🔴 Debe más de 2 meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
-      </div>
-      
-      <div class="row g-1 border-top pt-2 mt-1 text-start">
-        ${bloquesMesesHTML}
-        <div class="col-4 col-sm-3 mb-1">
-          <span class="text-secondary" style="font-size: 0.72rem; font-weight: bold;">Matrícula</span><br>
-          <span class="${j.matricula > 0 ? 'text-primary' : 'text-muted'}" style="font-size: 0.82rem; font-weight: 700;">
-            ${formateador.format(j.matricula)}
-          </span>
-        </div>
-      </div>
+          let bloquesMesesHTML = "";
+          for (let i = 0; i < meses.length; i++) {
+            let montoMes = j.valoresMeses[i];
+            let claseColor = montoMes > 0 ? 'monto-deuda' : 'text-success';
+            
+            bloquesMesesHTML += `
+              <div class="col-4 col-sm-3 mb-1">
+                <span class="text-muted" style="font-size: 0.72rem;">${meses[i]}</span><br>
+                <span class="${claseColor}" style="font-size: 0.82rem; font-weight: 600;">${formateador.format(montoMes)}</span>
+              </div>`;
+          }
 
-      <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem;">
-        <div><strong>Forma de Pago:</strong> ${j.formaPago}</div>
-        ${bloqueDescuento}
-      </div>
+          divTarjeta.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-bold text-dark" style="font-size: 1.05rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
+              ${j.alerta ? '<span class="badge-critico">🔴 Debe más de 2 meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
+            </div>
+            
+            <div class="row g-1 border-top pt-2 mt-1 text-start">
+              ${bloquesMesesHTML}
+              <div class="col-4 col-sm-3 mb-1">
+                <span class="text-secondary" style="font-size: 0.72rem; font-weight: bold;">Matrícula</span><br>
+                <span class="${j.matricula > 0 ? 'text-primary' : 'text-muted'}" style="font-size: 0.82rem; font-weight: 700;">
+                  ${formateador.format(j.matricula)}
+                </span>
+              </div>
+            </div>
 
-      <div class="text-end fw-bold text-dark border-top pt-2 mt-2" style="font-size: 1.05rem;">
-        Total a Cobrar: <span class="monto-deuda">${formateador.format(j.total)}</span>
-      </div>
-    `;
-    contenedor.appendChild(divTarjeta);
-  });
-}
+            <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem;">
+              <div><strong>Forma de Pago:</strong> ${j.formaPago}</div>
+              ${bloqueDescuento}
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center border-top pt-2 mt-2">
+              <button class="btn btn-sm btn-light border" style="font-size: 0.8rem; font-weight: 600;" onclick="descargarFichaPDF(this)">Descargar Ficha PDF 📄</button>
+              <div class="text-end fw-bold text-dark" style="font-size: 1.05rem;">
+                Total a Cobrar: <span class="monto-deuda">${formateador.format(j.total)}</span>
+              </div>
+            </div>
+          `;
+          contenedor.appendChild(divTarjeta);
+        });
+      }
+
+      // Entorno de impresión aislado e individual por popup
+      function descargarFichaPDF(boton) {
+        let tarjetaOriginal = boton.closest('.tarjeta-jugador');
+        let nombreJugador = tarjetaOriginal.querySelector('.fw-bold').textContent.trim();
+        
+        let tarjetaClonada = tarjetaOriginal.cloneNode(true);
+        let botonClonado = tarjetaClonada.querySelector('.btn-light');
+        if (botonClonado) botonClonado.remove();
+        
+        let ventanaImpresion = window.open('', '_blank', 'height=600,width=800');
+        
+        ventanaImpresion.document.write('<html><head><title>Ficha_' + nombreJugador.replace(/[^a-zA-Z0-9]/g, "_") + '</title>');
+        ventanaImpresion.document.write('<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">');
+        ventanaImpresion.document.write('<style>');
+        ventanaImpresion.document.write('body { background-color: #ffffff; padding: 30px; font-family: sans-serif; }');
+        ventanaImpresion.document.write('.tarjeta-jugador { background: white; border-radius: 14px; padding: 20px; border: 1px solid #ced4da !important; border-left: 6px solid #198754 !important; }');
+        ventanaImpresion.document.write('.tarjeta-alerta { border-left: 6px solid #dc3545 !important; }');
+        ventanaImpresion.document.write('.monto-deuda { color: #dc3545 !important; font-weight: 700; }');
+        ventanaImpresion.document.write('.text-success { color: #198754 !important; }');
+        ventanaImpresion.document.write('.badge-critico { background-color: #dc3545; color: white; font-size: 0.75rem; padding: 6px 10px; border-radius: 8px; font-weight: bold; }');
+        ventanaImpresion.document.write('.badge-regular { background-color: #e8f5e9; color: #2e7d32; font-size: 0.75rem; padding: 6px 10px; border-radius: 8px; font-weight: bold; border: 1px solid #c8e6c9; }');
+        ventanaImpresion.document.write('@media print { * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }</style></head><body>');
+        
+        ventanaImpresion.document.write(tarjetaClonada.outerHTML);
+        ventanaImpresion.document.write('</body></html>');
+        
+        ventanaImpresion.document.close();
+        ventanaImpresion.focus();
+        
+        setTimeout(function() {
+          ventanaImpresion.print();
+          ventanaImpresion.close();
+        }, 500);
+      }
     </script>
   </body>
 </html>

@@ -207,10 +207,13 @@ function obtenerDeudasPorDivision(divisionBuscada) {
   if (!hojaReporte) return { nombresMeses: [], listaJugadores: [] };
   
   const datosReporte = hojaReporte.getDataRange().getValues();
-  let nombresMeses = [];
-  for (let col = 12; col <= 18; col++) { 
-    nombresMeses.push(datosReporte[0][col] ? datosReporte[0][col].toString().trim() : "Mes");
-  }
+ let nombresMeses = [];
+for (let col = 12; col <= 18; col++) { 
+  let mesTexto = datosReporte[0][col] ? datosReporte[0][col].toString().trim() : "Mes";
+  // Quita los paréntesis si existen
+  mesTexto = mesTexto.replace(/[\(\)]/g, ''); 
+  nombresMeses.push(mesTexto);
+}
 
   let listaJugadores = [];
   if (!divisionBuscada) return { nombresMeses: nombresMeses, listaJugadores: [] };
@@ -226,7 +229,7 @@ function obtenerDeudasPorDivision(divisionBuscada) {
       let totalDeuda = parseFloat(filaR[20]) || 0; 
       let matriculaValor = Math.abs(parseFloat(filaR[23])) || 0; // Columna X
       
-      if (totalDeuda <= 0 && matriculaValor <= 0) continue; 
+      if (totalDeuda < 0 && matriculaValor <= 0) continue; 
       
       let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre";
       let formaPagoRaw = filaR[6] ? filaR[6].toString().trim() : "-";
