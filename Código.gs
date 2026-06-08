@@ -22,29 +22,32 @@ function onOpen() {
 /**
  * Función unificada que actualiza Socios, Deudas y Matrículas consecutivamente
  */
+/**
+ * Función unificada que actualiza Socios, Deudas y Matrículas consecutivamente
+ * Modificada bajo la Opción B: Sin alertas de interfaz de usuario.
+ */
 function actualizarTodo() {
-  const ui = SpreadsheetApp.getUi();
   try {
-    ui.alert('Proceso iniciado', 'Actualizando base de datos completa... Por favor, espera.', ui.ButtonSet.OK);
-    
     // 1. Ejecuta actualización de socios
     actualizarSocios();
     
     // 2. Ejecuta antigüedad de deuda
     actualizarAntiguedadDeuda();
-    
+
     // 3. Ejecuta la importación y conversión de Matrículas
     actualizarMatriculas();
 
-    // ======= AGREGA ESTA LÍNEA AQUÍ =======
+    // 4. Ejecuta la importación de Fichajes
     actualizarFichajes();
     
-    ui.alert('Proceso completado', 'Se han actualizado los Socios, la Antigüedad de Deuda, las Matrículas y los Fichajes correctamente. ✅', ui.ButtonSet.OK);
+    // Dejamos un registro interno en la consola en lugar de un cartel emergente
+    Logger.log('Proceso completado correctamente de manera silenciosa.');
+    
   } catch (error) {
-    ui.alert('Error', 'Hubo un problema durante la actualización: ' + error.toString(), ui.ButtonSet.OK);
+    // En caso de error de ejecución, se guardará en los registros de Google Apps Script
+    Logger.log('Hubo un problema durante la actualización: ' + error.toString());
   }
 }
-
 function actualizarSocios() {
   const nombreCarpeta = "Socios";
   const nombreHojaDestino = "Socios";
