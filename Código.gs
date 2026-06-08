@@ -4,6 +4,8 @@ const CARPETA_RAIZ_ID = '1pqMjUjZ-K4Bo3lC-kSYDaGjAUxQSaRrN';
 const SPREADSHEET_DESTINO_ID = '1OQ-BGFqYxEqy1UR6YkREXnVqwaNiFmLVEWW_Q_SB50k';
 // NUEVO: ID de la carpeta específica de Matrículas provisto por el usuario
 const CARPETA_MATRICULAS_ID = '1R-s385voSUlgo33xa8pqpuc_KEUEKdZS';
+// ======= AGREGA ESTA LÍNEA AQUÍ =======
+const CARPETA_FICHAJES_ID = '1YrzDCmhVjcE3_qv_uUjeNq_UqFaob_DW';
 
 /**
  * 1. Crea el menú "Club online" al abrir la hoja de cálculo.
@@ -31,10 +33,13 @@ function actualizarTodo() {
     // 2. Ejecuta antigüedad de deuda
     actualizarAntiguedadDeuda();
     
-    // 3. NUEVO: Ejecuta la importación y conversión de Matrículas
+    // 3. Ejecuta la importación y conversión de Matrículas
     actualizarMatriculas();
+
+    // ======= AGREGA ESTA LÍNEA AQUÍ =======
+    actualizarFichajes();
     
-    ui.alert('Proceso completado', 'Se han actualizado los Socios, la Antigüedad de Deuda y las Matrículas correctamente. ✅', ui.ButtonSet.OK);
+    ui.alert('Proceso completado', 'Se han actualizado los Socios, la Antigüedad de Deuda, las Matrículas y los Fichajes correctamente. ✅', ui.ButtonSet.OK);
   } catch (error) {
     ui.alert('Error', 'Hubo un problema durante la actualización: ' + error.toString(), ui.ButtonSet.OK);
   }
@@ -309,4 +314,145 @@ function ejecutarEnvioMailsUIDetalles() {
   } catch(e) {
     return "Error al enviar los correos: " + e.toString();
   }
+}
+
+/**
+ * NUEVA FUNCIÓN: Procesa los archivos .xls/.xlsx de la carpeta Fichajes
+ * Copia únicamente las columnas A, B, C, F y G de forma contigua (Columnas A a E)
+ * en la hoja 'Fichajes' desde la fila 7 hacia abajo, evitando duplicados por DNI.
+ */
+/**
+ * FUNCIÓN DEFINITIVA: Procesa los archivos de la carpeta Fichajes.
+ * - Escribe los datos de corrido desde la celda A1 (Fila 1: Encabezados).
+ * - Extrae el Socio dentro de los paréntesis dejando ÚNICAMENTE los números enteros (elimina letras y guiones).
+ * - Agrega de forma contigua las columnas hasta la G del Excel de origen.
+ */
+function actualizarFichajes() {
+  const nombreHojaDestino = "Fichajes";
+  const ssDestino = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
+  let hojaDestino = ssDestino.getSheetByName(nombreHojaDestino);
+  if (!hojaDestino) {
+    hojaDestino = ssDestino.insertSheet(nombreHojaDestino);
+  }
+
+  // 1. Evitar duplicados usando el Número de Comprobante / Nº (Columna B de destino)
+  const comprobantesExistentes = new Set();
+  const ultimaFilaDestino = hojaDestino.getLastRow();
+  
+  if (ultimaFilaDestino >= 2) {
+    // Leemos la columna B (Nº de Comprobante) desde la fila 2 hasta el final actual
+    const valoresDestinoB = hojaDestino.getRange(2, 2, ultimaFilaDestino - 1, 1).getValues();
+    valoresDestinoB.forEach(fila => {
+      let compStr = fila[0].toString().trim();
+      if (compStr !== "") comprobantesExistentes.add(compStr);
+    });
+  }
+
+  // 2. Buscar todos los archivos de Excel en la carpeta de Fichajes
+  const carpetaDestino = DriveApp.getFolderById(CARPETA_FICHAJES_ID);
+  const archivos = carpetaDestino.getFiles();
+  
+  while (archivos.hasNext()) {
+    const archivo = archivos.next();
+    const nombreArchivo = archivo.getName().toLowerCase();
+    
+    if (nombreArchivo.endsWith('.xls') || nombreArchivo.endsWith('.xlsx')) {
+      let tempFileId = null;
+      
+      try {
+        // Conversión temporal a Google Sheets
+        const blob = archivo.getBlob();
+        const config = { title: archivo.getName() + '_temp_fichajes', mimeType: MimeType.GOOGLE_SHEETS };
+        const tempFile = Drive.Files.create(config, blob);
+        tempFileId = tempFile.id;
+        
+        const tempSpreadsheet = SpreadsheetApp.openById(tempFileId);
+        const hojaOrigen = tempSpreadsheet.getSheets()[0];
+        const datosOrigen = hojaOrigen.getDataRange().getValues();
+        
+        // Según la estructura real: la fila 7 (índice 6) tiene las cabeceras reales
+        const filaCabeceraOriginal = 6;
+        const filaInicioDatosOriginal = 7; 
+        
+        if (datosOrigen.length <= filaInicioDatosOriginal) {
+          eliminarArchivoTemporal(tempFileId);
+          continue;
+        }
+        
+        // Si la hoja destino está completamente vacía, creamos la fila 1 con los encabezados limpios
+        if (hojaDestino.getLastRow() === 0) {
+          const encabezadosDestino = [["Fecha", "Nº", "Cliente", "Socio", "Valores", "Importe", "Concepto"]];
+          hojaDestino.getRange(1, 1, 1, 7).setValues(encabezadosDestino);
+        }
+        
+        const registrosAAgregar = [];
+        
+        // Recorremos las filas de datos del archivo origen (desde índice 7 en adelante)
+        for (let i = filaInicioDatosOriginal; i < datosOrigen.length; i++) {
+          const filaOriginal = datosOrigen[i];
+          if (!filaOriginal || filaOriginal[1] === undefined || filaOriginal[1] === "") continue; 
+          
+          let numComprobanteStr = filaOriginal[1].toString().trim(); // Columna B (Nº)
+          
+          // Validamos duplicados usando el número de comprobante único
+          if (numComprobanteStr !== "" && !comprobantesExistentes.has(numComprobanteStr)) {
+            
+            // Tratamiento de la Fecha (Columna A - índice 0)
+            let fechaValor = filaOriginal[0];
+            if (fechaValor instanceof Date) {
+              fechaValor = Utilities.formatDate(fechaValor, "America/Argentina/Buenos_Aires", "dd/MM/yyyy");
+            } else if (typeof fechaValor === 'string' && fechaValor.includes("GMT")) {
+              fechaValor = Utilities.formatDate(new Date(fechaValor), "America/Argentina/Buenos_Aires", "dd/MM/yyyy");
+            }
+            
+            // --- SEPARACIÓN DEL CLIENTE Y LIMPIEZA DE TEXTO (SOLO NÚMEROS EN SOCIO) ---
+            let textoCliente = filaOriginal[2] !== undefined ? filaOriginal[2].toString() : ""; // Columna C (Cliente)
+            let parteNombre = textoCliente;
+            let parteSocio = "";
+            
+            if (textoCliente.includes("(")) {
+              parteNombre = textoCliente.split("(")[0].trim();
+              
+              let matchSocio = textoCliente.match(/\(([^)]+)\)/);
+              if (matchSocio && matchSocio[1]) {
+                // Removemos CUALQUIER carácter que no sea un número del 0 al 9 (quita "NS", "-" y espacios)
+                parteSocio = matchSocio[1].replace(/[^0-9]/g, '').trim();
+              }
+            }
+            
+            // Armamos la estructura contigua de 7 columnas (A hasta G de destino)
+            const nuevaFilaCompacta = [
+              fechaValor,                                           // Columna A: Fecha limpia
+              numComprobanteStr,                                    // Columna B: Nº Comprobante
+              parteNombre,                                          // Columna C: Nombre del Cliente
+              parteSocio,                                           // Columna D: Número de Socio (SOLO NÚMEROS)
+              filaOriginal[3] !== undefined ? filaOriginal[3] : "", // Columna E: Valores (Efectivo)
+              filaOriginal[4] !== undefined ? filaOriginal[4] : "", // Columna F: Importe (60000)
+              filaOriginal[6] !== undefined ? filaOriginal[6] : ""  // Columna G: Conceptos (Columna G original, índice 6)
+            ];
+            
+            registrosAAgregar.push(nuevaFilaCompacta);
+            comprobantesExistentes.add(numComprobanteStr); 
+          }
+        }
+        
+        // 3. Pegar los registros acumulados abajo de todo de forma contigua
+        if (registrosAAgregar.length > 0) {
+          let filaInsercion = hojaDestino.getLastRow() + 1;
+          if (filaInsercion < 2) {
+            filaInsercion = 2; // Los datos empiezan en la fila 2 si los encabezados ocupan la 1
+          }
+          
+          // Escribimos el bloque limpio de 7 columnas de ancho (A hasta G)
+          hojaDestino.getRange(filaInsercion, 1, registrosAAgregar.length, 7).setValues(registrosAAgregar);
+        }
+        
+        eliminarArchivoTemporal(tempFileId);
+      } catch (error) {
+        if (tempFileId) eliminarArchivoTemporal(tempFileId);
+        Logger.log('Error procesando archivo de fichaje ' + archivo.getName() + ': ' + error.message);
+      }
+    }
+  }
+  ssDestino.toast('Hoja de Fichajes reestructurada con éxito desde A1.', '¡Éxito!');
 }
