@@ -16,6 +16,8 @@ function onOpen() {
     .addItem('Actualizar Todo 🔄', 'actualizarTodo')
     .addSeparator()
     .addItem('Enviar Mails a Deudores ✉️', 'enviarMailsDeudores')
+    .addItem('Generar Plantillas WhatsApp 💬', 'generarPlantillasWhatsApp')
+    .addItem('Generar PDFs de Planteles 📄', 'generarPdfPlantelesMasivo')
     .addToUi();
 }
 
@@ -461,4 +463,333 @@ function actualizarFichajes() {
     }
   }
   ssDestino.toast('Hoja de Fichajes reestructurada con éxito desde A1.', '¡Éxito!');
+}
+function generarPlantillasWhatsApp() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
+  const hojaDeuda = ss.getSheetByName('AntiguedaddeDeuda');
+  const hojaSocios = ss.getSheetByName('Socios');
+  
+  // 1. Validar u obtener la hoja de destino para WhatsApp
+  let hojaWA = ss.getSheetByName('Plantilla WA');
+  if (!hojaWA) {
+    hojaWA = ss.insertSheet('Plantilla WA');
+  }
+  
+  // Limpiamos la hoja para poner los datos nuevos y actualizados
+  hojaWA.clearContents();
+  hojaWA.clearFormats();
+  
+  // Encabezados
+  hojaWA.getRange(1, 1, 1, 2).setValues([["Teléfono", "Mensaje de WhatsApp"]]).setFontWeight("bold");
+  
+  if (!hojaDeuda || !hojaSocios) {
+    ss.toast("Error: No se encuentran las hojas necesarias.", "Error");
+    return;
+  }
+  
+  const datosDeuda = hojaDeuda.getDataRange().getValues();
+  const datosSocios = hojaSocios.getDataRange().getValues();
+  
+  // 2. Directorio de socios: mapeamos ID de Socio con el Teléfono (Columna 5 -> Índice 4)
+  let directorioSocios = {};
+  for (let j = 1; j < datosSocios.length; j++) {
+    let idSocio = datosSocios[j][0] ? datosSocios[j][0].toString().trim() : "";
+    let telefono = datosSocios[j][4] ? datosSocios[j][4].toString().trim() : "Sin Teléfono"; // Columna 5 es índice 4
+    
+    if (idSocio) {
+      directorioSocios[idSocio] = telefono;
+    }
+  }
+  
+  let registrosWA = [];
+  
+  // Función auxiliar interna para dar formato de dinero: $X.XXX (sin decimales)
+  const formatearDinero = (valor) => {
+    return "$" + Math.round(valor).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  };
+  
+  // 3. Procesamos los deudores
+  for (let i = 1; i < datosDeuda.length; i++) {
+    let fila = datosDeuda[i];
+    let idSocioDeuda = fila[0] ? fila[0].toString().trim() : "";
+    let nombreJugador = fila[1];
+    
+    if (!idSocioDeuda || idSocioDeuda.toLowerCase().includes("total")) continue;
+    
+    let deudaMesActual = parseFloat(fila[3]) || 0; 
+    let deudaAntiguaAcumulada = 0;
+    let mesesDebidos = 0;
+    
+    // Contamos meses y sumamos deuda antigua (columnas de la 4 a la 9 en adelante)
+    for (let col = 4; col <= 9; col++) {
+      let valorCol = parseFloat(fila[col]) || 0;
+      if (valorCol > 0) {
+        mesesDebidos++;
+        deudaAntiguaAcumulada += valorCol;
+      }
+    }
+    
+    // Si tiene deudas en los meses anteriores (Filtro idéntico al mail corporativo)
+    if (deudaAntiguaAcumulada > 0) {
+      // Sumamos 1 mes más al contador si también debe el mes actual
+      if (deudaMesActual > 0) mesesDebidos++; 
+      
+      let telefonoDestino = directorioSocios[idSocioDeuda] || "Revisar Teléfono";
+      let totalACobrar = deudaMesActual + deudaAntiguaAcumulada;
+      
+      // Aplicamos el formato solicitado sin decimales: $XX.XXX
+      let totalFormateado = formatearDinero(totalACobrar);
+      
+      // Armamos la plantilla con el texto enriquecido para WhatsApp
+      let cuerpoWhatsApp = `Estimado/a *${nombreJugador}*,\n\nLe comunicamos que registra saldo pendiente en su cuota social por más de 2 meses, acumulando un *Total a Cobrar de ${totalFormateado}*.\n\nSolicitamos tenga a bien acercarse a la tesorería en 495bis y 15 bis de lunes a viernes de 18 a 20hs, escribir a tesoreriagonnet@hotmail.com o por whatsapp al 2216819698 para regularizar su situación.\n\nAtentamente,\n*Tesorería - Club SFP Gonnet.*`;
+      
+      registrosWA.push({
+        telefono: telefonoDestino,
+        mensaje: cuerpoWhatsApp,
+        meses: mesesDebidos // Guardamos el número de meses adeudados para poder ordenar
+      });
+    }
+  }
+  
+  // 4. ORDENAR de mayor a menor según la cantidad de meses que deben
+  registrosWA.sort((a, b) => b.meses - a.meses);
+  
+  // Convertimos el array de objetos a la estructura pura de filas de la planilla [Telefono, Mensaje]
+  let matrizFinal = registrosWA.map(item => [item.telefono, item.mensaje]);
+  
+  // 5. Imprimir y formatear la hoja final
+  if (matrizFinal.length > 0) {
+    hojaWA.getRange(2, 1, matrizFinal.length, 2).setValues(matrizFinal);
+    
+    // Mejoras de visualización para que los humanos trabajen cómodos
+    hojaWA.getRange(2, 2, matrizFinal.length, 1).setWrap(true); // Ajuste automático de línea para leer el mensaje completo
+    hojaWA.setColumnWidth(1, 130); // Ancho para ver el teléfono
+    hojaWA.setColumnWidth(2, 550); // Ancho amplio para el texto
+    
+    ss.toast("Se generaron " + matrizFinal.length + " mensajes ordenados por mora en 'Plantilla WA'.", "¡Éxito!");
+  } else {
+    ss.toast("No se encontraron deudores que cumplan las condiciones.", "Aviso");
+  }
+}
+
+function generarPdfPlantelesMasivo() {
+  const CARPETA_PDF_DESTINO_ID = '19heazUq7HMUunRm2Z3Mdy-2D0g2A4iQn';
+  const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
+  const hojaReporte = ss.getSheetByName('Reporte');
+  
+  if (!hojaReporte) {
+    SpreadsheetApp.getUi().alert('Error: No se encontró la hoja llamada "Reporte".');
+    return;
+  }
+  
+  const datos = hojaReporte.getDataRange().getValues();
+  if (datos.length <= 1) {
+    SpreadsheetApp.getUi().alert('La hoja "Reporte" no contiene datos suficientes.');
+    return;
+  }
+  
+  // 1. Extraer encabezados y mapear índices específicos solicitados
+  // Se remueve el índice 7 (Columna H) de la lista de impresión.
+  // Columnas resultantes a dibujar: A-G (0-6), I-J (8-9), M-S (12-18), U (20), V (21), X (23), Y (24)
+  const filaCabecera = datos[0];
+  const indicesColumnas = [0, 1, 2, 3, 4, 5, 6, 8, 9, 12, 13, 14, 15, 16, 17, 18, 20, 21, 23, 24];
+  
+  const cabecerasFiltradas = indicesColumnas.map(idx => filaCabecera[idx] ? filaCabecera[idx].toString().replace(/[\(\)]/g, '').trim() : "");
+  
+  // 2. Agrupar filas de jugadores por Plantel (La columna H sigue siendo el índice 7 para agrupar internamente)
+  let plantelesMap = {};
+  
+  for (let i = 1; i < datos.length; i++) {
+    let fila = datos[i];
+    if (!fila || fila[7] === undefined || fila[7].toString().trim() === "") continue;
+    
+    let nombrePlantel = fila[7].toString().trim();
+    
+    if (!plantelesMap[nombrePlantel]) {
+      plantelesMap[nombrePlantel] = [];
+    }
+    
+    // Extraemos los valores de las columnas seleccionadas (aquí ya no se incluye la H)
+    let filaFiltrada = indicesColumnas.map(idx => {
+      let val = fila[idx];
+      
+      if (val instanceof Date) {
+        return Utilities.formatDate(val, "America/Argentina/Buenos_Aires", "dd/MM/yyyy");
+      }
+      
+      // Reemplazos estratégicos para achicar textos largos de la forma de pago (Columna G - Índice 6)
+      if (typeof val === 'string') {
+        let textoLimpio = val.trim();
+        if (textoLimpio === "Entidad de Recaudación | Pagos Virtuales del Sur (Argentina)") {
+          return "Debito automatico";
+        }
+        if (textoLimpio === "Administración/Secretaría") {
+          return "Tesoreria";
+        }
+        return textoLimpio;
+      }
+      
+      // Formatear montos de dinero para las columnas financieras
+      if (typeof val === 'number' && idx >= 12) {
+        return "$" + Math.round(val).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+      }
+      
+      return val !== undefined && val !== null ? val.toString().trim() : "";
+    });
+    
+    plantelesMap[nombrePlantel].push(filaFiltrada);
+  }
+  
+  // 3. Obtener o validar carpeta de destino en Google Drive
+  let carpetaDestino;
+  try {
+    carpetaDestino = DriveApp.getFolderById(CARPETA_PDF_DESTINO_ID);
+  } catch (err) {
+    SpreadsheetApp.getUi().alert('Error: No se pudo acceder a la carpeta de Drive provista. Verifica los permisos o el ID.');
+    return;
+  }
+  
+  let totalCreados = 0;
+  const listaPlanteles = Object.keys(plantelesMap);
+  const fechaHoyStr = Utilities.formatDate(new Date(), "America/Argentina/Buenos_Aires", "dd/MM/yyyy");
+
+  // 4. Iterar sobre cada plantel para armar y exportar su PDF sin la columna H
+  listaPlanteles.forEach(plantel => {
+    let filasJugadores = plantelesMap[plantel];
+    
+    let htmlContent = `
+    <html>
+    <head>
+      <style>
+        @page {
+          size: A4 landscape;
+          margin: 8mm 6mm;
+        }
+        body {
+          font-family: Arial, sans-serif;
+          color: #222222;
+          margin: 0;
+          padding: 0;
+          font-size: 7.5pt;
+        }
+        .header {
+          background-color: #111111;
+          color: #fecb00;
+          padding: 12px;
+          border-bottom: 3px solid #fecb00;
+          margin-bottom: 12px;
+        }
+        .header table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        .header td {
+          border: none;
+          padding: 0;
+        }
+        .titulo {
+          font-size: 15pt;
+          font-weight: bold;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        .subtitulo {
+          font-size: 9pt;
+          color: #ffffff;
+          margin-top: 3px;
+        }
+        .fecha {
+          text-align: right;
+          font-size: 9pt;
+          color: #ffffff;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 5px;
+        }
+        th {
+          background-color: #f2f2f2;
+          color: #111111;
+          font-weight: bold;
+          border: 1px solid #cccccc;
+          padding: 4px 3px;
+          font-size: 7pt;
+          text-transform: uppercase;
+        }
+        td {
+          border: 1px solid #e0e0e0;
+          padding: 4px 3px;
+          text-align: left;
+          white-space: nowrap;
+        }
+        tr:nth-child(even) {
+          background-color: #fafafa;
+        }
+        .monto {
+          text-align: right;
+          font-weight: bold;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <table>
+          <tr>
+            <td>
+              <div class="titulo">Reporte de Control de Deuda</div>
+              <div class="subtitulo">Plantel: <strong>${plantel}</strong> | S.F.P. GONNET</div>
+            </td>
+            <td class="fecha">
+              Fecha de Emisión:<br><strong>${fechaHoyStr}</strong>
+            </td>
+          </tr>
+        </table>
+      </div>
+      
+      <table>
+        <thead>
+          <tr>
+    `;
+    
+    // Inyectar cabeceras sin la columna H
+    cabecerasFiltradas.forEach(cab => {
+      htmlContent += `<th>${cab}</th>`;
+    });
+    
+    htmlContent += `
+          </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    // Inyectar filas procesadas
+    filasJugadores.forEach(fila => {
+      htmlContent += `<tr>`;
+      fila.forEach((celda) => {
+        let claseMonto = celda.toString().indexOf('$') !== -1 ? ' class="monto"' : '';
+        htmlContent += `<td${claseMonto}>${celda}</td>`;
+      });
+      htmlContent += `</tr>`;
+    });
+    
+    htmlContent += `
+        </tbody>
+      </table>
+    </body>
+    </html>
+    `;
+    
+    // 5. Crear archivo HTML temporal y convertir a PDF nativo
+    let blobHtml = Utilities.newBlob(htmlContent, "text/html", "temp.html");
+    let archivoTemp = carpetaDestino.createFile(blobHtml);
+    
+    let pdfBlob = archivoTemp.getAs(MimeType.PDF).setName(`Reporte_Deudas_${plantel.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`);
+    carpetaDestino.createFile(pdfBlob);
+    
+    archivoTemp.setTrashed(true);
+    totalCreados++;
+  });
+  
+  ss.toast(`Se generaron ${totalCreados} PDFs optimizados (sin columna H redundante).`, "¡Éxito!");
 }
