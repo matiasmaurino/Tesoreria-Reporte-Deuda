@@ -179,12 +179,63 @@ function eliminarArchivoTemporal(id) {
 // CONTROLADOR DE LA WEB APP MÓVIL
 // ==========================================
 
-function doGet() {
-  return HtmlService.createTemplateFromFile('Index')
-      .evaluate()
-      .setTitle('Consulta de Deudas - Club SFP GONNET')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL); // <-- AQUÍ QUEDÓ GRABADO FIJO EL PERMISO
+function doGet(e) {
+  let JSONString = "";
+  let action = e && e.parameter ? e.parameter.action : "";
+
+  // ACCIÓN 1: Alimentar el selector dinámico del login con las categorías reales
+  if (action === "obtenerCategorias") {
+    let listado = [];
+    const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
+    const hojaDivisiones = ss.getSheetByName('Divisiones');
+    if (hojaDivisiones) {
+      const datos = hojaDivisiones.getDataRange().getValues();
+      // Fila 0 son cabeceras. Columna A (índice 0) tiene el nombre de la categoría
+      for (let i = 1; i < datos.length; i++) {
+        let cat = datos[i][0] ? datos[i][0].toString().trim() : "";
+        if (cat) listado.push(cat);
+      }
+    }
+    JSONString = JSON.stringify(listado.sort());
+
+  // ACCIÓN 2: Validar contraseña introducida contra la pestaña "Divisiones"
+  } else if (action === "login") {
+    let categoriaBuscada = e.parameter.categoria || "";
+    let claveBuscada = e.parameter.clave || "";
+    let respuesta = { exito: false, mensaje: "Categoría no encontrada" };
+
+    const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
+    const hojaDivisiones = ss.getSheetByName('Divisiones');
+    if (hojaDivisiones) {
+      const datos = hojaDivisiones.getDataRange().getValues();
+      for (let i = 1; i < datos.length; i++) {
+        let catExistente = datos[i][0] ? datos[i][0].toString().trim() : "";
+        let passCorrecta = datos[i][1] ? datos[i][1].toString().trim() : ""; // Columna B (índice 1)
+        
+        if (catExistente.toLowerCase() === categoriaBuscada.toLowerCase()) {
+          if (passCorrecta === claveBuscada.toString().trim()) {
+            respuesta = { exito: true, categoria: catExistente };
+          } else {
+            respuesta = { exito: false, mensaje: "Contraseña incorrecta para esta división." };
+          }
+          break;
+        }
+      }
+    }
+    JSONString = JSON.stringify(respuesta);
+
+  // ACCIÓN 3: Ejecutar tu motor original de deudas pasando la división autenticada
+  } else if (action === "obtenerDeudas") {
+    let division = e.parameter.division || "";
+    
+    // LLAMADA CLAVE: Se comunica directo con tu función nativa de procesamiento
+    let datosDeuda = obtenerDeudasPorDivision(division); 
+    JSONString = JSON.stringify(datosDeuda);
+  }
+
+  // Retorno estructurado con cabeceras JSON para evitar bloqueos de CORS en Firebase
+  return ContentService.createTextOutput(JSONString)
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function obtenerDivisiones() {
@@ -210,7 +261,7 @@ function obtenerDeudasPorDivision(divisionBuscada) {
   
   const datosReporte = hojaReporte.getDataRange().getValues();
  let nombresMeses = [];
-for (let col = 12; col <= 18; col++) { 
+  for (let col = 12; col <= 18; col++) { 
   let mesTexto = datosReporte[0][col] ? datosReporte[0][col].toString().trim() : "Mes";
   // Quita los paréntesis si existen
   mesTexto = mesTexto.replace(/[\(\)]/g, ''); 
@@ -588,7 +639,7 @@ function generarPdfPlantelesMasivo() {
     return;
   }
   
-  // 3. Obtener o validar carpeta de destino en Google Drive
+  // 1. Obtener o validar carpeta de destino en Google Drive
   let carpetaDestino;
   try {
     carpetaDestino = DriveApp.getFolderById(CARPETA_PDF_DESTINO_ID);
@@ -597,9 +648,7 @@ function generarPdfPlantelesMasivo() {
     return;
   }
 
-  // =========================================================================
-  // LOGICA AÑADIDA: Borrar todo el contenido de la carpeta destino antes de empezar
-  // =========================================================================
+  // Borrar todo el contenido de la carpeta destino antes de empezar
   const archivosExistentes = carpetaDestino.getFiles();
   while (archivosExistentes.hasNext()) {
     archivosExistentes.next().setTrashed(true);
@@ -608,10 +657,9 @@ function generarPdfPlantelesMasivo() {
   while (subCarpetasExistentes.hasNext()) {
     subCarpetasExistentes.next().setTrashed(true);
   }
-  // =========================================================================
   
   const filaCabecera = datos[0];
-  const indicesColumnas = [0, 1, 2, 3, 4, 5, 6, 20, 21];
+  const indicesColumnas = [1, 2, 4, 5, 6, 20, 21];
   
   const cabecerasFiltradas = indicesColumnas.map(idx => filaCabecera[idx] ? filaCabecera[idx].toString().replace(/[\(\)]/g, '').trim() : "");
   
@@ -628,7 +676,7 @@ function generarPdfPlantelesMasivo() {
       plantelesMap[nombrePlantel] = [];
     }
     
-    // Extraemos los valores de las columnas seleccionadas (aquí ya no se incluye la H)
+    // Extraemos los valores de las columnas seleccionadas
     let filaFiltrada = indicesColumnas.map(idx => {
       let val = fila[idx];
       
@@ -651,9 +699,13 @@ function generarPdfPlantelesMasivo() {
         return textoLimpio;
       }
       
-      // Formatear montos de dinero para las columnas financieras
-      if (typeof val === 'number' && idx >= 12) {
-        return "$" + Math.round(val).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+      // Formatear montos de dinero para las columnas financieras excepto la última de meses enteros
+      if (typeof val === 'number') {
+        if (idx === 21) { // Última columna del array indicesColumnas (Mapea la columna V de la hoja)
+          return Math.round(val).toString();
+        } else if (idx >= 12) {
+          return "$" + Math.round(val).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        }
       }
       
       return val !== undefined && val !== null ? val.toString().trim() : "";
@@ -683,13 +735,13 @@ function generarPdfPlantelesMasivo() {
           color: #222222;
           margin: 0;
           padding: 0;
-          font-size: 7.5pt;
+          font-size: 10pt; /* Tamaño base estándar para todas las letras del reporte */
         }
         .header {
-          background-color: #111111;
-          color: #fecb00;
-          padding: 12px;
-          border-bottom: 3px solid #fecb00;
+          background-color: #ffffff; /* Fondo blanco limpio para contraste */
+          color: #222222;
+          padding: 0 0 10px 0;
+          border-bottom: 3px solid #111111;
           margin-bottom: 12px;
         }
         .header table {
@@ -699,24 +751,32 @@ function generarPdfPlantelesMasivo() {
         .header td {
           border: none;
           padding: 0;
+          vertical-align: bottom;
         }
         .titulo {
-          font-size: 15pt;
+          font-size: 14pt; /* El único con tamaño destacado según instrucción 1 */
           font-weight: bold;
           text-transform: uppercase;
           letter-spacing: 0.5px;
+          margin-bottom: 4px;
         }
-        .subtitulo {
-          font-size: 9pt;
-          color: #ffffff;
-          margin-top: 3px;
+        .meta-texto {
+          font-size: 10pt; /* Igual al tamaño base */
+          color: #222222; /* Texto en negro para máxima visibilidad */
+          font-weight: normal;
         }
-        .fecha {
+        .meta-texto strong {
+          font-weight: bold;
+        }
+        .logo-container {
           text-align: right;
-          font-size: 9pt;
-          color: #ffffff;
+          width: 65px;
         }
-        table {
+        .logo-club {
+          height: 48px;
+          width: auto;
+        }
+        table.datos-table {
           width: 100%;
           border-collapse: collapse;
           margin-top: 5px;
@@ -727,13 +787,15 @@ function generarPdfPlantelesMasivo() {
           font-weight: bold;
           border: 1px solid #cccccc;
           padding: 4px 3px;
-          font-size: 7pt;
+          font-size: 10pt; /* Igual al tamaño base */
           text-transform: uppercase;
+          text-align: left;
         }
         td {
           border: 1px solid #e0e0e0;
           padding: 4px 3px;
           text-align: left;
+          font-size: 10pt; /* Igual al tamaño base */
           white-space: nowrap;
         }
         tr:nth-child(even) {
@@ -741,6 +803,11 @@ function generarPdfPlantelesMasivo() {
         }
         .monto {
           text-align: right;
+          font-weight: bold;
+        }
+        /* Alineación e identidad estricta de número entero para la columna de meses debidos */
+        .meses-der {
+          text-align: right !important;
           font-weight: bold;
         }
       </style>
@@ -751,16 +818,15 @@ function generarPdfPlantelesMasivo() {
           <tr>
             <td>
               <div class="titulo">Reporte de Control de Deuda</div>
-              <div class="subtitulo">Plantel: <strong>${plantel}</strong> | S.F.P. GONNET</div>
+              <div class="meta-texto">
+                Plantel: <strong>${plantel}</strong>  &nbsp;|&nbsp; Fecha de Emisión: <strong>${fechaHoyStr}</strong>
+              </div>
             </td>
-            <td class="fecha">
-              Fecha de Emisión:<br><strong>${fechaHoyStr}</strong>
-            </td>
-          </tr>
+                      </tr>
         </table>
       </div>
       
-      <table>
+      <table class="datos-table">
         <thead>
           <tr>
     `;
@@ -779,9 +845,18 @@ function generarPdfPlantelesMasivo() {
     // Inyectar filas procesadas
     filasJugadores.forEach(fila => {
       htmlContent += `<tr>`;
-      fila.forEach((celda) => {
-        let claseMonto = celda.toString().indexOf('$') !== -1 ? ' class="monto"' : '';
-        htmlContent += `<td${claseMonto}>${celda}</td>`;
+      fila.forEach((celda, idxCelda) => {
+        let clases = [];
+        
+        // Si es la última columna (Índice de celda final), aplicar alineación numérica derecha sin formatos raros
+        if (idxCelda === fila.length - 1) {
+          clases.push('meses-der');
+        } else if (celda.toString().indexOf('$') !== -1) {
+          clases.push('monto');
+        }
+        
+        let claseAtributo = clases.length > 0 ? ` class="${clases.join(' ')}"` : '';
+        htmlContent += `<td${claseAtributo}>${celda}</td>`;
       });
       htmlContent += `</tr>`;
     });
@@ -804,5 +879,51 @@ function generarPdfPlantelesMasivo() {
     totalCreados++;
   });
   
-  ss.toast(`Se generaron ${totalCreados} PDFs optimizados (sin columna H redundante).`, "¡Éxito!");
+  ss.toast(`Se generaron ${totalCreados} PDFs optimizados con los nuevos lineamientos gráficos.`, "¡Éxito!");
+}
+// Carga dinámicamente las categorías reales en el select del Login
+function obtenerCategoriasLogin() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
+  const hojaDivisiones = ss.getSheetByName('Divisiones');
+  
+  if (!hojaDivisiones) return [];
+  
+  const datos = hojaDivisiones.getDataRange().getValues();
+  let categorias = [];
+  
+  // Asumiendo que Fila 0 son cabeceras y Columna A (índice 0) tiene el nombre de la categoría
+  for (let i = 1; i < datos.length; i++) {
+    let cat = datos[i][0] ? datos[i][0].toString().trim() : "";
+    if (cat) {
+      categorias.push(cat);
+    }
+  }
+  return categorias.sort();
+}
+
+// Valida las credenciales introducidas por el técnico contra la pestaña Divisiones
+function verificarCredencialesTecnico(categoria, contraseniaIntroducida) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
+  const hojaDivisiones = ss.getSheetByName('Divisiones');
+  
+  if (!hojaDivisiones) {
+    return { exito: false, mensaje: "Error interno: No se encontró la hoja Divisiones." };
+  }
+  
+  const datos = hojaDivisiones.getDataRange().getValues();
+  
+  for (let i = 1; i < datos.length; i++) {
+    let catExistente = datos[i][0] ? datos[i][0].toString().trim() : "";
+    let passCorrecta = datos[i][1] ? datos[i][1].toString().trim() : ""; // Columna B (índice 1)
+    
+    if (catExistente.toLowerCase() === categoria.toLowerCase()) {
+      if (passCorrecta === contraseniaIntroducida.toString().trim()) {
+        return { exito: true, categoria: catExistente };
+      } else {
+        return { exito: false, mensaje: "Contraseña incorrecta. Inténtalo de nuevo." };
+      }
+    }
+  }
+  
+  return { exito: false, mensaje: "La categoría seleccionada no fue encontrada." };
 }
