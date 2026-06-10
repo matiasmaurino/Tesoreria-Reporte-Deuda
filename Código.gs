@@ -588,11 +588,30 @@ function generarPdfPlantelesMasivo() {
     return;
   }
   
-  // 1. Extraer encabezados y mapear índices específicos solicitados
-  // Se remueve el índice 7 (Columna H) de la lista de impresión.
-  // Columnas resultantes a dibujar: A-G (0-6), I-J (8-9), M-S (12-18), U (20), V (21), X (23), Y (24)
+  // 3. Obtener o validar carpeta de destino en Google Drive
+  let carpetaDestino;
+  try {
+    carpetaDestino = DriveApp.getFolderById(CARPETA_PDF_DESTINO_ID);
+  } catch (err) {
+    SpreadsheetApp.getUi().alert('Error: No se pudo acceder a la carpeta de Drive provista. Verifica los permisos o el ID.');
+    return;
+  }
+
+  // =========================================================================
+  // LOGICA AÑADIDA: Borrar todo el contenido de la carpeta destino antes de empezar
+  // =========================================================================
+  const archivosExistentes = carpetaDestino.getFiles();
+  while (archivosExistentes.hasNext()) {
+    archivosExistentes.next().setTrashed(true);
+  }
+  const subCarpetasExistentes = carpetaDestino.getFolders();
+  while (subCarpetasExistentes.hasNext()) {
+    subCarpetasExistentes.next().setTrashed(true);
+  }
+  // =========================================================================
+  
   const filaCabecera = datos[0];
-  const indicesColumnas = [0, 1, 2, 3, 4, 5, 6, 8, 9, 12, 13, 14, 15, 16, 17, 18, 20, 21, 23, 24];
+  const indicesColumnas = [0, 1, 2, 3, 4, 5, 6, 20, 21];
   
   const cabecerasFiltradas = indicesColumnas.map(idx => filaCabecera[idx] ? filaCabecera[idx].toString().replace(/[\(\)]/g, '').trim() : "");
   
@@ -626,6 +645,9 @@ function generarPdfPlantelesMasivo() {
         if (textoLimpio === "Administración/Secretaría") {
           return "Tesoreria";
         }
+        if (textoLimpio === "Administración/Secretaría | Pagos Virtuales del Sur (Argentina)") {
+          return "Controlar";
+        }
         return textoLimpio;
       }
       
@@ -638,15 +660,6 @@ function generarPdfPlantelesMasivo() {
     });
     
     plantelesMap[nombrePlantel].push(filaFiltrada);
-  }
-  
-  // 3. Obtener o validar carpeta de destino en Google Drive
-  let carpetaDestino;
-  try {
-    carpetaDestino = DriveApp.getFolderById(CARPETA_PDF_DESTINO_ID);
-  } catch (err) {
-    SpreadsheetApp.getUi().alert('Error: No se pudo acceder a la carpeta de Drive provista. Verifica los permisos o el ID.');
-    return;
   }
   
   let totalCreados = 0;
