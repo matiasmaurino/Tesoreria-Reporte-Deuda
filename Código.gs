@@ -55,7 +55,8 @@ function actualizarSocios() {
   const nombreHojaDestino = "Socios";
   const columnasAMantener = [1, 2, 3, 5, 9, 11, 16, 22, 28, 29];
   const filaInicioOriginal = 6;
-  procesarUltimoArchivo(CARPETA_RAIZ_ID, nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener, false);
+  // Enviamos true en un nuevo parámetro final para activar la limpieza de cadenas de pago
+  procesarUltimoArchivo(CARPETA_RAIZ_ID, nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener, false, true);
 }
 
 function actualizarAntiguedadDeuda() {
@@ -63,7 +64,7 @@ function actualizarAntiguedadDeuda() {
   const nombreHojaDestino = "AntiguedaddeDeuda";
   const columnasAMantener = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
   const filaInicioOriginal = 5;
-  procesarUltimoArchivo(CARPETA_RAIZ_ID, nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener, false);
+  procesarUltimoArchivo(CARPETA_RAIZ_ID, nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener, false, false);
 }
 
 /**
@@ -75,16 +76,15 @@ function actualizarMatriculas() {
   const columnasAMantener = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
   const filaInicioOriginal = 5;
   
-  // Llamamos al procesador indicándole la carpeta específica y activando el multiplicador por -1
-  procesarUltimoArchivo(CARPETA_MATRICULAS_ID, null, nombreHojaDestino, filaInicioOriginal, columnasAMantener, true);
+  // Llamamos al procesador indicándole la carpeta específica, activando el multiplicador por -1 y desactivando la limpieza de texto
+  procesarUltimoArchivo(CARPETA_MATRICULAS_ID, null, nombreHojaDestino, filaInicioOriginal, columnasAMantener, true, false);
 }
 
 /**
  * Función auxiliar modificada encargada de buscar, filtrar, transformar y pegar en destino.
  */
-function procesarUltimoArchivo(idCarpetaOrigen, nombreSubcarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener, multiplicarPorMenosUno) {
+function procesarUltimoArchivo(idCarpetaOrigen, nombreSubcarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener, multiplicarPorMenosUno, limpiarFormasPago) {
   let carpetaDestino;
-  
   if (nombreSubcarpeta) {
     const carpetaRaiz = DriveApp.getFolderById(idCarpetaOrigen);
     const subcarpetas = carpetaRaiz.getFoldersByName(nombreSubcarpeta);
@@ -101,7 +101,6 @@ function procesarUltimoArchivo(idCarpetaOrigen, nombreSubcarpeta, nombreHojaDest
   const archivos = carpetaDestino.getFiles();
   let ultimoArchivo = null;
   let fechaUltimoArchivo = 0;
-  
   while (archivos.hasNext()) {
     const archivo = archivos.next();
     if (archivo.getName().toLowerCase().endsWith('.xls') || archivo.getName().toLowerCase().endsWith('.xlsx')) {
@@ -141,11 +140,25 @@ function procesarUltimoArchivo(idCarpetaOrigen, nombreSubcarpeta, nombreHojaDest
       columnasAMantener.forEach(idx => {
         let valor = filaOriginal[idx - 1];
         
-        // REQUERIMIENTO ESPECIAL: Si es Matrícula, validamos y multiplicamos por -1 los números != 0
+        // REQUERIMIENTO ESPECIAL 1: Si es Matrícula, validamos y multiplicamos por -1 los números != 0
         if (multiplicarPorMenosUno && typeof valor === 'number' && valor !== 0) {
           valor = valor * -1;
         }
         
+        // REQUERIMIENTO ESPECIAL 2: Limpieza estricta de formas de pago complejas al importar Socios
+        if (limpiarFormasPago && typeof valor === 'string') {
+          let textoLimpio = valor.trim();
+          if (textoLimpio === "Entidad de Recaudación | Pagos Virtuales del Sur (Argentina)") {
+            valor = "Debito automatico";
+          } else if (textoLimpio === "Administración/Secretaría") {
+            valor = "Tesoreria";
+          } else if (textoLimpio === "Administración/Secretaría | Pagos Virtuales del Sur (Argentina)") {
+            valor = "Tesoreria";
+          } else {
+            valor = textoLimpio;
+          }
+        }
+  
         nuevaFila.push(valor !== undefined ? valor : "");
       });
       matrizFiltrada.push(nuevaFila);
@@ -627,7 +640,6 @@ function generarPdfPlantelesMasivo() {
   const CARPETA_PDF_DESTINO_ID = '19heazUq7HMUunRm2Z3Mdy-2D0g2A4iQn';
   const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
   const hojaReporte = ss.getSheetByName('Reporte');
-  
   if (!hojaReporte) {
     SpreadsheetApp.getUi().alert('Error: No se encontró la hoja llamada "Reporte".');
     return;
@@ -660,18 +672,14 @@ function generarPdfPlantelesMasivo() {
   
   const filaCabecera = datos[0];
   const indicesColumnas = [1, 2, 4, 5, 6, 20, 21];
-  
   const cabecerasFiltradas = indicesColumnas.map(idx => filaCabecera[idx] ? filaCabecera[idx].toString().replace(/[\(\)]/g, '').trim() : "");
-  
   // 2. Agrupar filas de jugadores por Plantel (La columna H sigue siendo el índice 7 para agrupar internamente)
   let plantelesMap = {};
-  
   for (let i = 1; i < datos.length; i++) {
     let fila = datos[i];
     if (!fila || fila[7] === undefined || fila[7].toString().trim() === "") continue;
     
     let nombrePlantel = fila[7].toString().trim();
-    
     if (!plantelesMap[nombrePlantel]) {
       plantelesMap[nombrePlantel] = [];
     }
@@ -684,19 +692,8 @@ function generarPdfPlantelesMasivo() {
         return Utilities.formatDate(val, "America/Argentina/Buenos_Aires", "dd/MM/yyyy");
       }
       
-      // Reemplazos estratégicos para achicar textos largos de la forma de pago (Columna G - Índice 6)
       if (typeof val === 'string') {
-        let textoLimpio = val.trim();
-        if (textoLimpio === "Entidad de Recaudación | Pagos Virtuales del Sur (Argentina)") {
-          return "Debito automatico";
-        }
-        if (textoLimpio === "Administración/Secretaría") {
-          return "Tesoreria";
-        }
-        if (textoLimpio === "Administración/Secretaría | Pagos Virtuales del Sur (Argentina)") {
-          return "Controlar";
-        }
-        return textoLimpio;
+        return val.trim();
       }
       
       // Formatear montos de dinero para las columnas financieras excepto la última de meses enteros
@@ -730,6 +727,7 @@ function generarPdfPlantelesMasivo() {
           size: A4 landscape;
           margin: 8mm 6mm;
         }
+ 
         body {
           font-family: Arial, sans-serif;
           color: #222222;
@@ -738,6 +736,7 @@ function generarPdfPlantelesMasivo() {
           font-size: 10pt; /* Tamaño base estándar para todas las letras del reporte */
         }
         .header {
+        
           background-color: #ffffff; /* Fondo blanco limpio para contraste */
           color: #222222;
           padding: 0 0 10px 0;
@@ -747,6 +746,7 @@ function generarPdfPlantelesMasivo() {
         .header table {
           width: 100%;
           border-collapse: collapse;
+ 
         }
         .header td {
           border: none;
@@ -754,15 +754,18 @@ function generarPdfPlantelesMasivo() {
           vertical-align: bottom;
         }
         .titulo {
-          font-size: 14pt; /* El único con tamaño destacado según instrucción 1 */
+          font-size: 14pt;
+          /* El único con tamaño destacado según instrucción 1 */
           font-weight: bold;
           text-transform: uppercase;
           letter-spacing: 0.5px;
           margin-bottom: 4px;
         }
         .meta-texto {
-          font-size: 10pt; /* Igual al tamaño base */
-          color: #222222; /* Texto en negro para máxima visibilidad */
+          font-size: 10pt;
+          /* Igual al tamaño base */
+          color: #222222;
+          /* Texto en negro para máxima visibilidad */
           font-weight: normal;
         }
         .meta-texto strong {
@@ -787,7 +790,8 @@ function generarPdfPlantelesMasivo() {
           font-weight: bold;
           border: 1px solid #cccccc;
           padding: 4px 3px;
-          font-size: 10pt; /* Igual al tamaño base */
+          font-size: 10pt;
+          /* Igual al tamaño base */
           text-transform: uppercase;
           text-align: left;
         }
@@ -819,7 +823,7 @@ function generarPdfPlantelesMasivo() {
             <td>
               <div class="titulo">Reporte de Control de Deuda</div>
               <div class="meta-texto">
-                Plantel: <strong>${plantel}</strong>  &nbsp;|&nbsp; Fecha de Emisión: <strong>${fechaHoyStr}</strong>
+                 Plantel: <strong>${plantel}</strong>  &nbsp;|&nbsp; Fecha de Emisión: <strong>${fechaHoyStr}</strong>
               </div>
             </td>
                       </tr>
@@ -828,20 +832,18 @@ function generarPdfPlantelesMasivo() {
       
       <table class="datos-table">
         <thead>
-          <tr>
+           <tr>
     `;
     
     // Inyectar cabeceras sin la columna H
     cabecerasFiltradas.forEach(cab => {
       htmlContent += `<th>${cab}</th>`;
     });
-    
     htmlContent += `
           </tr>
         </thead>
         <tbody>
     `;
-    
     // Inyectar filas procesadas
     filasJugadores.forEach(fila => {
       htmlContent += `<tr>`;
@@ -851,7 +853,7 @@ function generarPdfPlantelesMasivo() {
         // Si es la última columna (Índice de celda final), aplicar alineación numérica derecha sin formatos raros
         if (idxCelda === fila.length - 1) {
           clases.push('meses-der');
-        } else if (celda.toString().indexOf('$') !== -1) {
+         } else if (celda.toString().indexOf('$') !== -1) {
           clases.push('monto');
         }
         
@@ -860,14 +862,12 @@ function generarPdfPlantelesMasivo() {
       });
       htmlContent += `</tr>`;
     });
-    
     htmlContent += `
         </tbody>
       </table>
     </body>
     </html>
     `;
-    
     // 5. Crear archivo HTML temporal y convertir a PDF nativo
     let blobHtml = Utilities.newBlob(htmlContent, "text/html", "temp.html");
     let archivoTemp = carpetaDestino.createFile(blobHtml);
@@ -878,7 +878,6 @@ function generarPdfPlantelesMasivo() {
     archivoTemp.setTrashed(true);
     totalCreados++;
   });
-  
   ss.toast(`Se generaron ${totalCreados} PDFs optimizados con los nuevos lineamientos gráficos.`, "¡Éxito!");
 }
 // Carga dinámicamente las categorías reales en el select del Login
