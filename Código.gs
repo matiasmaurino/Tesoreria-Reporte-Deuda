@@ -174,6 +174,31 @@ function procesarUltimoArchivo(idCarpetaOrigen, nombreSubcarpeta, nombreHojaDest
     if (matrizFiltrada.length > 0) {
       hojaDestino.getRange(1, 1, matrizFiltrada.length, matrizFiltrada[0].length).setValues(matrizFiltrada);
     }
+    
+    // =================================================================
+    // NUEVO REQUERIMIENTO: REGISTRO DE ARCHIVO PROCESADO EN HOJA "Aux"
+    // =================================================================
+    let hojaAux = ssDestino.getSheetByName('Aux');
+    if (!hojaAux) hojaAux = ssDestino.insertSheet('Aux'); // Si no existe la crea
+    
+    // Obtenemos todos los valores de la columna J (columna 10) para ver cuál es la última fila real ocupada
+    const valoresJ = hojaAux.getRange("J:J").getValues();
+    let ultimaFilaJ = 0;
+    for (let f = valoresJ.length - 1; f >= 0; f--) {
+      if (valoresJ[f][0] !== "") {
+        ultimaFilaJ = f + 1;
+        break;
+      }
+    }
+    
+    // Si la columna está completamente vacía, empezamos en la fila 1, sino en la siguiente disponible
+    let filaGuardado = ultimaFilaJ === 0 ? 1 : ultimaFilaJ + 1;
+    
+    // Generamos un texto descriptivo detallado (Ej: "Socios: archivo_socios_2026.xlsx")
+    let registroTexto = nombreHojaDestino + ": " + ultimoArchivo.getName();
+    hojaAux.getRange(filaGuardado, 10).setValue(registroTexto); // Escribe en la columna J (10)
+    // =================================================================
+    
     eliminarArchivoTemporal(tempFile.id);
     ssDestino.toast('Hoja de "' + nombreHojaDestino + '" actualizada.', '¡Éxito!');
   } catch (error) {
