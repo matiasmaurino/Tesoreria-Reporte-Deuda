@@ -323,8 +323,8 @@ function obtenerDeudasPorDivision(divisionBuscada) {
       if (totalDeuda < 0 && matriculaValor <= 0) continue; 
       
       let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre";
-      let formaPagoRaw = filaR[6] ? filaR[6].toString().trim() : "-";
-      let formaPago = formaPagoRaw.includes("Entidad de Recaudación") ? "Debito Automatico" : "Tesoreria";
+      // Lee directamente el valor real que está escrito en la columna G del Reporte
+let formaPago = filaR[6] ? filaR[6].toString().trim() : "-";
       
       let descuento = filaR[8] ? filaR[8].toString().trim() : "";
       let periodoDesc = filaR[9] ? filaR[9].toString().trim() : "";
