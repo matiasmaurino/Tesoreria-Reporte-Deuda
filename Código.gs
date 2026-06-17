@@ -290,16 +290,13 @@ function obtenerDeudasPorDivision(divisionBuscada) {
   const hojaReporte = ss.getSheetByName('Reporte');
   if (!hojaReporte) return { nombresMeses: [], listaJugadores: [] };
   
-  const datosReporte = hojaReporte.getDataRange().getValues();
-  let nombresMeses = [];
-  for (let col = 12; col <= 18; col++) { 
-    let mesTexto = datosReporte[0][col] ? datosReporte[0][col].toString().trim() : "Mes";
-    mesTexto = mesTexto.replace(/[\(\)]/g, ''); 
-    nombresMeses.push(mesTexto);
-  }
+  // --- CAMBIO AQUÍ: Forzamos la lectura hasta la columna 29 (AC) ---
+  const ultimaFila = hojaReporte.getLastRow();
+  const datosReporte = hojaReporte.getRange(1, 1, ultimaFila, 29).getValues();
+  // -----------------------------------------------------------------
 
-  let listaJugadores = [];
-  if (!divisionBuscada) return { nombresMeses: nombresMeses, listaJugadores: [] };
+  let nombresMeses = [];
+    if (!divisionBuscada) return { nombresMeses: nombresMeses, listaJugadores: [] };
   let buscarLimpio = divisionBuscada.toLowerCase().replace(/[^a-z0-9]/g, "");
   for (let k = 1; k < datosReporte.length; k++) {
     let filaR = datosReporte[k];
@@ -315,16 +312,21 @@ function obtenerDeudasPorDivision(divisionBuscada) {
       let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre";
       let formaPago = filaR[6] ? filaR[6].toString().trim() : "-";
       
-      // NUEVO: Leer el valor de la columna AC (Índice 28)
-      let ultimoPagoValor = filaR[28];
+      // --- PROCESAMIENTO SEGURO DEL ÚLTIMO PAGO ---
+      let ultimoPagoValor = filaR[28]; // Columna AC (Índice 28)
       let ultimoPagoFormateado = "-";
+      
       if (ultimoPagoValor) {
         if (ultimoPagoValor instanceof Date) {
+          // Si Google Sheets lo detecta como fecha, la formateamos prolija
           ultimoPagoFormateado = Utilities.formatDate(ultimoPagoValor, "America/Argentina/Buenos_Aires", "dd/MM/yyyy");
         } else {
-          ultimoPagoFormateado = ultimoPagoValor.toString().trim();
+          // Si viene como texto u otro formato, lo limpiamos
+          let textoFecha = ultimoPagoValor.toString().trim();
+          ultimoPagoFormateado = textoFecha !== "" ? textoFecha : "-";
         }
       }
+      // --------------------------------------------
       
       let descuento = filaR[8] ? filaR[8].toString().trim() : "";
       let periodoDesc = filaR[9] ? filaR[9].toString().trim() : "";
