@@ -290,14 +290,21 @@ function obtenerDeudasPorDivision(divisionBuscada) {
   const hojaReporte = ss.getSheetByName('Reporte');
   if (!hojaReporte) return { nombresMeses: [], listaJugadores: [] };
   
-  // --- CAMBIO AQUÍ: Forzamos la lectura hasta la columna 29 (AC) ---
+  // Forzamos explícitamente la lectura de las 29 columnas (hasta AC) para evitar recortes automáticos
   const ultimaFila = hojaReporte.getLastRow();
   const datosReporte = hojaReporte.getRange(1, 1, ultimaFila, 29).getValues();
-  // -----------------------------------------------------------------
-
+  
   let nombresMeses = [];
-    if (!divisionBuscada) return { nombresMeses: nombresMeses, listaJugadores: [] };
+  for (let col = 12; col <= 18; col++) { 
+    let mesTexto = datosReporte[0][col] ? datosReporte[0][col].toString().trim() : "Mes";
+    mesTexto = mesTexto.replace(/[\(\)]/g, ''); 
+    nombresMeses.push(mesTexto);
+  }
+
+  let listaJugadores = [];
+  if (!divisionBuscada) return { nombresMeses: nombresMeses, listaJugadores: [] };
   let buscarLimpio = divisionBuscada.toLowerCase().replace(/[^a-z0-9]/g, "");
+  
   for (let k = 1; k < datosReporte.length; k++) {
     let filaR = datosReporte[k];
     if (!filaR || filaR[7] === undefined) continue; 
@@ -312,21 +319,17 @@ function obtenerDeudasPorDivision(divisionBuscada) {
       let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre";
       let formaPago = filaR[6] ? filaR[6].toString().trim() : "-";
       
-      // --- PROCESAMIENTO SEGURO DEL ÚLTIMO PAGO ---
-      let ultimoPagoValor = filaR[28]; // Columna AC (Índice 28)
+      // Procesamiento seguro de la columna AC (Índice 28)
+      let ultimoPagoValor = filaR[28];
       let ultimoPagoFormateado = "-";
-      
       if (ultimoPagoValor) {
         if (ultimoPagoValor instanceof Date) {
-          // Si Google Sheets lo detecta como fecha, la formateamos prolija
           ultimoPagoFormateado = Utilities.formatDate(ultimoPagoValor, "America/Argentina/Buenos_Aires", "dd/MM/yyyy");
         } else {
-          // Si viene como texto u otro formato, lo limpiamos
           let textoFecha = ultimoPagoValor.toString().trim();
           ultimoPagoFormateado = textoFecha !== "" ? textoFecha : "-";
         }
       }
-      // --------------------------------------------
       
       let descuento = filaR[8] ? filaR[8].toString().trim() : "";
       let periodoDesc = filaR[9] ? filaR[9].toString().trim() : "";
@@ -341,7 +344,7 @@ function obtenerDeudasPorDivision(divisionBuscada) {
       listaJugadores.push({
         nombre: nombre,
         formaPago: formaPago,
-        ultimoPago: ultimoPagoFormateado, // <-- Agregamos la propiedad aquí
+        ultimoPago: ultimoPagoFormateado,
         descuento: descuento,
         periodoDesc: periodoDesc,
         total: totalDeuda,
