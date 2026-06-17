@@ -288,14 +288,36 @@ function obtenerDivisiones() {
 function obtenerDeudasPorDivision(divisionBuscada) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
   const hojaReporte = ss.getSheetByName('Reporte');
+  const hojaIngresos = ss.getSheetByName('Ingresos'); // <-- Traemos la hoja de Ingresos para calcular en vivo
   if (!hojaReporte) return { nombresMeses: [], listaJugadores: [] };
   
-  // 1. Ampliamos el rango a 29 columnas para incluir sí o sí la columna AC
+  // 1. Leemos los datos de Reporte hasta la columna X (24 columnas son suficientes para deudas y matrículas)
   const ultimaFila = hojaReporte.getLastRow();
-  const datosReporte = hojaReporte.getRange(1, 1, ultimaFila, 29).getValues();
+  const datosReporte = hojaReporte.getRange(1, 1, ultimaFila, 24).getValues();
   
-  // 2. Leemos en paralelo la columna 29 (AC) como texto visible para evitar problemas de formato de fecha
-  const fechasDisplay = hojaReporte.getRange(1, 29, ultimaFila, 1).getDisplayValues();
+  // 2. Mapeamos las fechas de pago desde la hoja de Ingresos en memoria para que sea súper rápido
+  let mapaUltimosPagos = {};
+  if (hojaIngresos) {
+    const datosIngresos = hojaIngresos.getDataRange().getValues();
+    // Recorremos desde la fila 2 (índice 1) ignorando las cabeceras
+    for (let i = 1; i < datosIngresos.length; i++) {
+      let fechaReg = datosIngresos[i][1]; // Columna B: Fecha de Cobro / Registro
+      let nSocio = datosIngresos[i][5] ? datosIngresos[i][5].toString().trim() : ""; // Columna F: Nº Socio
+      
+      if (nSocio && fechaReg) {
+        let fechaObjeto = new Date(fechaReg);
+        if (!isNaN(fechaObjeto.getTime())) {
+          // Si el socio no está en el mapa, o encontramos una fecha más reciente, la actualizamos
+          if (!mapaUltimosPagos[nSocio] || fechaObjeto > mapaUltimosPagos[nSocio].objeto) {
+            mapaUltimosPagos[nSocio] = {
+              objeto: fechaObjeto,
+              texto: Utilities.formatDate(fechaObjeto, "America/Argentina/Buenos_Aires", "dd/MM/yyyy")
+            };
+          }
+        }
+      }
+    }
+  }
   
   let nombresMeses = [];
   for (let col = 12; col <= 18; col++) { 
@@ -319,17 +341,14 @@ function obtenerDeudasPorDivision(divisionBuscada) {
       let matriculaValor = Math.abs(parseFloat(filaR[23])) || 0; 
       
       if (totalDeuda < 0 && matriculaValor <= 0) continue;
+      let idSocio = filaR[0] ? filaR[0].toString().trim() : ""; // Columna A: Nº Socio para la búsqueda
       let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre";
       let formaPago = filaR[6] ? filaR[6].toString().trim() : "-";
       
-      // EXTRAEMOS LA FECHA DESDE LA COLUMNA 29 (AC) -> Índice k fila, 0 columna
+      // 3. CALCULO EN VIVO: Buscamos en el mapa usando el número de socio
       let ultimoPagoFormateado = "-";
-      if (fechasDisplay[k] && fechasDisplay[k][0]) {
-        let fechaTexto = fechasDisplay[k][0].toString().trim();
-        let fechaTextoLimpia = fechaTexto.toLowerCase().replace(/[^a-z0-9]/g, "");
-        if (fechaTexto !== "" && fechaTextoLimpia !== "ultimopago") {
-          ultimoPagoFormateado = fechaTexto;
-        }
+      if (idSocio && mapaUltimosPagos[idSocio]) {
+        ultimoPagoFormateado = mapaUltimosPagos[idSocio].texto;
       }
       
       let descuento = filaR[8] ? filaR[8].toString().trim() : "";
@@ -346,7 +365,7 @@ function obtenerDeudasPorDivision(divisionBuscada) {
       listaJugadores.push({
         nombre: nombre,
         formaPago: formaPago,
-        ultimoPago: ultimoPagoFormateado,
+        ultimoPago: ultimoPagoFormateado, // Enviamos el cálculo dinámico directo de "Ingresos"
         descuento: descuento,
         periodoDesc: periodoDesc,
         total: totalDeuda,
@@ -360,7 +379,6 @@ function obtenerDeudasPorDivision(divisionBuscada) {
   listaJugadores.sort((a, b) => b.total - a.total);
   return { nombresMeses: nombresMeses, listaJugadores: listaJugadores };
 }
-
 function enviarMailsDeudores() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
   const hojaDeuda = ss.getSheetByName('AntiguedaddeDeuda');
