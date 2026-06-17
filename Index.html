@@ -359,35 +359,7 @@
         if (filtroMorosidadActual === '2mas' && b3) b3.classList.add('active');
       }
 
-      
-
-      function filtrarPorEstado(estado) {
-        document.getElementById('btnTodo').className = 'btn btn-sm ' + (estado === 'todos' ? 'btn-dark active' : 'btn-outline-dark');
-        document.getElementById('btnDebe1').className = 'btn btn-sm ' + (estado === 'debe1' ? 'btn-dark active' : 'btn-outline-dark');
-        document.getElementById('btnDebe2').className = 'btn btn-sm ' + (estado === 'debe2' ? 'btn-dark active' : 'btn-outline-dark');
-        document.getElementById('btnDebeMatricula').className = 'btn btn-sm ' + (estado === 'debeMatricula' ? 'btn-danger active' : 'btn-outline-danger');
-
-        let listaFiltrada = [];
-        
-        if (estado === 'todos') {
-          listaFiltrada = jugadoresDeLaDivisionActual;
-        } 
-        else if (estado === 'debe1') {
-          listaFiltrada = jugadoresDeLaDivisionActual.filter(j => !j.alerta && j.total > 0);
-        } 
-        else if (estado === 'debe2') {
-          listaFiltrada = jugadoresDeLaDivisionActual.filter(j => j.alerta);
-        } 
-        else if (estado === 'debeMatricula') {
-          listaFiltrada = jugadoresDeLaDivisionActual.filter(j => j.matricula > 0);
-        }
-
-        // Corregido: Consumir siempre los meses reales provenientes del caché para evitar desalineación de arrays
-        let mesesReales = datosActualesCache ? datosActualesCache.nombresMeses : [];
-        renderizarTarjetas(listaFiltrada, mesesReales);
-      }
-
-function renderizarTarjetasFiltradas() {
+      function renderizarTarjetasFiltradas() {
         let contenedor = document.getElementById('contenedorTarjetas');
         let btnPdf = document.getElementById('btnPdf');
         contenedor.innerHTML = '';
@@ -410,22 +382,22 @@ function renderizarTarjetasFiltradas() {
         let contadorVisualizados = 0;
 
         jugadores.forEach(function(j) {
-          let mesesDebidosInterno = 0;
+          let mesesDebidos = 0;
           j.valoresMeses.forEach(function(monto) {
-            if (monto > 0) mesesDebidosInterno++;
+            if (monto > 0) mesesDebidos++;
           });
           
-          if (filtroMorosidadActual === '1cuota' && mesesDebidosInterno !== 1) return;
-          if (filtroMorosidadActual === '2mas' && mesesDebidosInterno < 2) return;
+          if (filtroMorosidadActual === '1cuota' && mesesDebidos !== 1) return;
+          if (filtroMorosidadActual === '2mas' && mesesDebidos < 2) return;
           
           contadorVisualizados++;
           
           let divTarjeta = document.createElement('div');
           
           let claseBorde = '';
-          if (mesesDebidosInterno === 1) {
+          if (mesesDebidos === 1) {
             claseBorde = ' tarjeta-advertencia';
-          } else if (mesesDebidosInterno >= 2) {
+          } else if (mesesDebidos >= 2) {
             claseBorde = ' tarjeta-alerta';
           }
           divTarjeta.className = 'tarjeta-jugador' + claseBorde;
@@ -450,28 +422,20 @@ function renderizarTarjetasFiltradas() {
           divTarjeta.innerHTML = `
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <span class="fw-bold text-dark" style="font-size: 1.05rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
-                ${j.alerta ? '<span class="badge-critico">🔴 Debe 2 ó más meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
+                ${j.alerta ? '<span class="badge-critico">🔴 Debe más de 2 meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
               </div>
               
               <div class="row g-1 border-top pt-2 mt-1 text-start">
                 ${bloquesMesesHTML}
-                
                 <div class="col-4 col-sm-3 mb-1">
                   <span class="text-secondary" style="font-size: 0.72rem; font-weight: bold;">Matrícula</span><br>
                   <span class="${j.matricula > 0 ? 'text-primary' : 'text-muted'}" style="font-size: 0.82rem; font-weight: 700;">
                     ${formateador.format(j.matricula)}
                   </span>
                 </div>
-
-                <div class="col-4 col-sm-3 mb-1">
-                  <span class="text-secondary" style="font-size: 0.72rem; font-weight: bold;">Último Pago</span><br>
-                  <span style="font-size: 0.82rem; font-weight: 700; color: #212529 !important;">
-                    ${j.ultimoPago}
-                  </span>
-                </div>
               </div>
 
-              <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem; text-align: left;">
+              <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem;">
                 <div><strong>Forma de Pago:</strong> ${j.formaPago}</div>
                 ${bloqueDescuento}
               </div>
@@ -487,8 +451,43 @@ function renderizarTarjetasFiltradas() {
         });
         
         if (contadorVisualizados === 0) {
-          contenedor.innerHTML = '<div class="alert alert-light text-center shadow-sm text-muted">No hay jugadores en esta condición para el filtro seleccionado.</div>';
+          let msg = "No hay jugadores en esta condición para el filtro seleccionado.";
+          if (filtroMorosidadActual === '1cuota') msg = "No hay ningún jugador que deba exactamente 1 cuota.";
+          if (filtroMorosidadActual === '2mas') msg = "No hay ningún jugador moroso con 2 o más cuotas vencidas.";
+          contenedor.innerHTML = `<div class="alert alert-light text-center shadow-sm text-muted">${msg}</div>`;
         }
+      }
+
+      function descargarPDF() {
+        let divisionSeleccionada = document.getElementById('selectDivision').value;
+        let tituloOriginal = document.title;
+        document.title = "Reporte_Deudas_" + divisionSeleccionada.replace(/[^a-zA-Z0-9]/g, "_");
+        window.print();
+        document.title = tituloOriginal;
+      }
+
+      function filtrarPorEstado(estado) {
+        document.getElementById('btnTodo').className = 'btn btn-sm ' + (estado === 'todos' ? 'btn-dark active' : 'btn-outline-dark');
+        document.getElementById('btnDebe1').className = 'btn btn-sm ' + (estado === 'debe1' ? 'btn-dark active' : 'btn-outline-dark');
+        document.getElementById('btnDebe2').className = 'btn btn-sm ' + (estado === 'debe2' ? 'btn-dark active' : 'btn-outline-dark');
+        document.getElementById('btnDebeMatricula').className = 'btn btn-sm ' + (estado === 'debeMatricula' ? 'btn-danger active' : 'btn-outline-danger');
+
+        let listaFiltrada = [];
+        
+        if (estado === 'todos') {
+          listaFiltrada = jugadoresDeLaDivisionActual;
+        } 
+        else if (estado === 'debe1') {
+          listaFiltrada = jugadoresDeLaDivisionActual.filter(j => !j.alerta && j.total > 0);
+        } 
+        else if (estado === 'debe2') {
+          listaFiltrada = jugadoresDeLaDivisionActual.filter(j => j.alerta);
+        } 
+        else if (estado === 'debeMatricula') {
+          listaFiltrada = jugadoresDeLaDivisionActual.filter(j => j.matricula > 0);
+        }
+
+        renderizarTarjetas(listaFiltrada, ["May-26", "Abr-26", "Mar-26", "Feb-26", "Ene-26", "Dic-25", "180 Días"]);
       }
 
       function renderizarTarjetas(jugadores, meses) {
@@ -526,28 +525,20 @@ function renderizarTarjetasFiltradas() {
           divTarjeta.innerHTML = `
             <div class="d-flex justify-content-between align-items-center mb-2">
               <span class="fw-bold text-dark" style="font-size: 1.05rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
-              ${j.alerta ? '<span class="badge-critico">🔴 Debe 2 ó más meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
+              ${j.alerta ? '<span class="badge-critico">🔴 Debe más de 2 meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
             </div>
             
             <div class="row g-1 border-top pt-2 mt-1 text-start">
               ${bloquesMesesHTML}
-              
               <div class="col-4 col-sm-3 mb-1">
                 <span class="text-secondary" style="font-size: 0.72rem; font-weight: bold;">Matrícula</span><br>
                 <span class="${j.matricula > 0 ? 'text-primary' : 'text-muted'}" style="font-size: 0.82rem; font-weight: 700;">
                   ${formateador.format(j.matricula)}
                 </span>
               </div>
-
-              <div class="col-4 col-sm-3 mb-1">
-                <span class="text-secondary" style="font-size: 0.72rem; font-weight: bold;">Último Pago</span><br>
-                <span style="font-size: 0.82rem; font-weight: 700; color: #212529 !important;">
-                  ${j.ultimoPago}
-                </span>
-              </div>
             </div>
 
-            <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem; text-align: left;">
+            <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem;">
               <div><strong>Forma de Pago:</strong> ${j.formaPago}</div>
               ${bloqueDescuento}
             </div>
@@ -561,13 +552,8 @@ function renderizarTarjetasFiltradas() {
           `;
           contenedor.appendChild(divTarjeta);
         });
-      }function descargarPDF() {
-        let divisionSeleccionada = document.getElementById('selectDivision').value;
-        let tituloOriginal = document.title;
-        document.title = "Reporte_Deudas_" + divisionSeleccionada.replace(/[^a-zA-Z0-9]/g, "_");
-        window.print();
-        document.title = tituloOriginal;
       }
+
       // Entorno de impresión aislado e individual por popup
       function descargarFichaPDF(boton) {
         let tarjetaOriginal = boton.closest('.tarjeta-jugador');
