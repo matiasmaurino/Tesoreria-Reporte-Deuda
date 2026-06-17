@@ -291,18 +291,16 @@ function obtenerDeudasPorDivision(divisionBuscada) {
   if (!hojaReporte) return { nombresMeses: [], listaJugadores: [] };
   
   const datosReporte = hojaReporte.getDataRange().getValues();
- let nombresMeses = [];
+  let nombresMeses = [];
   for (let col = 12; col <= 18; col++) { 
-  let mesTexto = datosReporte[0][col] ? datosReporte[0][col].toString().trim() : "Mes";
-  // Quita los paréntesis si existen
-  mesTexto = mesTexto.replace(/[\(\)]/g, ''); 
-  nombresMeses.push(mesTexto);
-}
+    let mesTexto = datosReporte[0][col] ? datosReporte[0][col].toString().trim() : "Mes";
+    mesTexto = mesTexto.replace(/[\(\)]/g, ''); 
+    nombresMeses.push(mesTexto);
+  }
 
   let listaJugadores = [];
   if (!divisionBuscada) return { nombresMeses: nombresMeses, listaJugadores: [] };
   let buscarLimpio = divisionBuscada.toLowerCase().replace(/[^a-z0-9]/g, "");
-
   for (let k = 1; k < datosReporte.length; k++) {
     let filaR = datosReporte[k];
     if (!filaR || filaR[7] === undefined) continue; 
@@ -311,32 +309,37 @@ function obtenerDeudasPorDivision(divisionBuscada) {
     if (divisionFilaLimpia !== "" && divisionFilaLimpia.includes(buscarLimpio)) {
       
       let totalDeuda = parseFloat(filaR[20]) || 0; 
-      let matriculaValor = Math.abs(parseFloat(filaR[23])) || 0; // Columna X
+      let matriculaValor = Math.abs(parseFloat(filaR[23])) || 0; 
       
-      if (totalDeuda < 0 && matriculaValor <= 0) continue; 
-      
+      if (totalDeuda < 0 && matriculaValor <= 0) continue;
       let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre";
-      // Lee directamente el valor real que está escrito en la columna G del Reporte
-let formaPago = filaR[6] ? filaR[6].toString().trim() : "-";
+      let formaPago = filaR[6] ? filaR[6].toString().trim() : "-";
+      
+      // NUEVO: Leer el valor de la columna AC (Índice 28)
+      let ultimoPagoValor = filaR[28];
+      let ultimoPagoFormateado = "-";
+      if (ultimoPagoValor) {
+        if (ultimoPagoValor instanceof Date) {
+          ultimoPagoFormateado = Utilities.formatDate(ultimoPagoValor, "America/Argentina/Buenos_Aires", "dd/MM/yyyy");
+        } else {
+          ultimoPagoFormateado = ultimoPagoValor.toString().trim();
+        }
+      }
       
       let descuento = filaR[8] ? filaR[8].toString().trim() : "";
       let periodoDesc = filaR[9] ? filaR[9].toString().trim() : "";
-      
       let valoresMeses = [];
       for (let col = 12; col <= 18; col++) {
         valoresMeses.push(parseFloat(filaR[col]) || 0);
       }
       
-      // NUEVA LÓGICA DIRECTA DESDE LA PLANILLA:
-      // Leemos la columna U ("CUANTOS MESES DEBE"), que es el índice 21 en la fila.
       let mesesDebidosPlanilla = parseInt(filaR[21]) || 0;
-      
-      // Si el número en la planilla es 2 o más, se activa la alerta crítica automáticamente
       let alertaCritica = (mesesDebidosPlanilla >= 2);
       
       listaJugadores.push({
         nombre: nombre,
         formaPago: formaPago,
+        ultimoPago: ultimoPagoFormateado, // <-- Agregamos la propiedad aquí
         descuento: descuento,
         periodoDesc: periodoDesc,
         total: totalDeuda,
