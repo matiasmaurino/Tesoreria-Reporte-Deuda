@@ -218,62 +218,29 @@ function eliminarArchivoTemporal(id) {
 // ==========================================
 
 function doGet(e) {
-  let JSONString = "";
   let action = e && e.parameter ? e.parameter.action : "";
 
-  // ACCIÓN 1: Alimentar el selector dinámico del login con las categorías reales
-  if (action === "obtenerCategorias") {
-    let listado = [];
-    const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
-    const hojaDivisiones = ss.getSheetByName('Divisiones');
-    if (hojaDivisiones) {
-      const datos = hojaDivisiones.getDataRange().getValues();
-      // Fila 0 son cabeceras. Columna A (índice 0) tiene el nombre de la categoría
-      for (let i = 1; i < datos.length; i++) {
-        let cat = datos[i][0] ? datos[i][0].toString().trim() : "";
-        if (cat) listado.push(cat);
-      }
+  // SI SE PIDE UNA ACCIÓN DE API (Mantiene compatibilidad externa por si acaso)
+  if (action) {
+    let JSONString = "";
+    if (action === "obtenerCategorias") {
+      JSONString = JSON.stringify(obtenerCategoriasLogin());
+    } else if (action === "login") {
+      let categoriaBuscada = e.parameter.categoria || "";
+      let claveBuscada = e.parameter.clave || "";
+      JSONString = JSON.stringify(verificarCredencialesTecnico(categoriaBuscada, claveBuscada));
+    } else if (action === "obtenerDeudas") {
+      let division = e.parameter.division || "";
+      JSONString = JSON.stringify(obtenerDeudasPorDivision(division));
     }
-    JSONString = JSON.stringify(listado.sort());
-
-  // ACCIÓN 2: Validar contraseña introducida contra la pestaña "Divisiones"
-  } else if (action === "login") {
-    let categoriaBuscada = e.parameter.categoria || "";
-    let claveBuscada = e.parameter.clave || "";
-    let respuesta = { exito: false, mensaje: "Categoría no encontrada" };
-
-    const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
-    const hojaDivisiones = ss.getSheetByName('Divisiones');
-    if (hojaDivisiones) {
-      const datos = hojaDivisiones.getDataRange().getValues();
-      for (let i = 1; i < datos.length; i++) {
-        let catExistente = datos[i][0] ? datos[i][0].toString().trim() : "";
-        let passCorrecta = datos[i][1] ? datos[i][1].toString().trim() : ""; // Columna B (índice 1)
-        
-        if (catExistente.toLowerCase() === categoriaBuscada.toLowerCase()) {
-          if (passCorrecta === claveBuscada.toString().trim()) {
-            respuesta = { exito: true, categoria: catExistente };
-          } else {
-            respuesta = { exito: false, mensaje: "Contraseña incorrecta para esta división." };
-          }
-          break;
-        }
-      }
-    }
-    JSONString = JSON.stringify(respuesta);
-
-  // ACCIÓN 3: Ejecutar tu motor original de deudas pasando la división autenticada
-  } else if (action === "obtenerDeudas") {
-    let division = e.parameter.division || "";
-    
-    // LLAMADA CLAVE: Se comunica directo con tu función nativa de procesamiento
-    let datosDeuda = obtenerDeudasPorDivision(division); 
-    JSONString = JSON.stringify(datosDeuda);
+    return ContentService.createTextOutput(JSONString).setMimeType(ContentService.MimeType.JSON);
   }
 
-  // Retorno estructurado con cabeceras JSON para evitar bloqueos de CORS en Firebase
-  return ContentService.createTextOutput(JSONString)
-    .setMimeType(ContentService.MimeType.JSON);
+  // SI NO SE PIDE ACCIÓN (Carga la página web directo en el navegador o iframe)
+  return HtmlService.createHtmlOutputFromFile('index')
+      .setTitle('Consulta de Deudas - Club SFP GONNET')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL) // Permite que se use en iframes externos
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 function obtenerDivisiones() {
@@ -297,19 +264,26 @@ function obtenerDeudasPorDivision(divisionBuscada) {
   const hojaReporte = ss.getSheetByName('Reporte');
   if (!hojaReporte) return { nombresMeses: [], listaJugadores: [] };
   
-  const datosReporte = hojaReporte.getDataRange().getValues();
- let nombresMeses = [];
+  const ultimaFila = hojaReporte.getLastRow();
+  if (ultimaFila <= 1) return { nombresMeses: [], listaJugadores: [] };
+  
+  // 1. Matriz principal numérica (A hasta X)
+  const datosReporte = hojaReporte.getRange(1, 1, ultimaFila, 24).getValues();
+  
+  // 2. Traemos la columna AC (Columna 29) estrictamente como texto visual amigable
+  const rangoUltimoPago = hojaReporte.getRange(1, 29, ultimaFila, 1).getDisplayValues();
+  
+  let nombresMeses = [];
   for (let col = 12; col <= 18; col++) { 
-  let mesTexto = datosReporte[0][col] ? datosReporte[0][col].toString().trim() : "Mes";
-  // Quita los paréntesis si existen
-  mesTexto = mesTexto.replace(/[\(\)]/g, ''); 
-  nombresMeses.push(mesTexto);
-}
+    let mesTexto = datosReporte[0][col] ? datosReporte[0][col].toString().trim() : "Mes";
+    mesTexto = mesTexto.replace(/[\(\)]/g, ''); 
+    nombresMeses.push(mesTexto);
+  }
 
   let listaJugadores = [];
   if (!divisionBuscada) return { nombresMeses: nombresMeses, listaJugadores: [] };
   let buscarLimpio = divisionBuscada.toLowerCase().replace(/[^a-z0-9]/g, "");
-
+  
   for (let k = 1; k < datosReporte.length; k++) {
     let filaR = datosReporte[k];
     if (!filaR || filaR[7] === undefined) continue; 
@@ -318,13 +292,20 @@ function obtenerDeudasPorDivision(divisionBuscada) {
     if (divisionFilaLimpia !== "" && divisionFilaLimpia.includes(buscarLimpio)) {
       
       let totalDeuda = parseFloat(filaR[20]) || 0; 
-      let matriculaValor = Math.abs(parseFloat(filaR[23])) || 0; // Columna X
+      let matriculaValor = Math.abs(parseFloat(filaR[23])) || 0; 
       
-      if (totalDeuda < 0 && matriculaValor <= 0) continue; 
-      
+      if (totalDeuda < 0 && matriculaValor <= 0) continue;
       let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre";
-      // Lee directamente el valor real que está escrito en la columna G del Reporte
-let formaPago = filaR[6] ? filaR[6].toString().trim() : "-";
+      let formaPago = filaR[6] ? filaR[6].toString().trim() : "-";
+      
+      // CAPTURA ABSOLUTA DE LA COLUMNA AC (29)
+      let ultimoPagoTexto = "-";
+      if (rangoUltimoPago[k] && rangoUltimoPago[k][0]) {
+        let valorCelda = rangoUltimoPago[k][0].toString().trim();
+        if (valorCelda !== "" && valorCelda.toLowerCase().replace(/[^a-z0-9]/g, "") !== "ultimopago") {
+          ultimoPagoTexto = valorCelda;
+        }
+      }
       
       let descuento = filaR[8] ? filaR[8].toString().trim() : "";
       let periodoDesc = filaR[9] ? filaR[9].toString().trim() : "";
@@ -334,16 +315,13 @@ let formaPago = filaR[6] ? filaR[6].toString().trim() : "-";
         valoresMeses.push(parseFloat(filaR[col]) || 0);
       }
       
-      // NUEVA LÓGICA DIRECTA DESDE LA PLANILLA:
-      // Leemos la columna U ("CUANTOS MESES DEBE"), que es el índice 21 en la fila.
       let mesesDebidosPlanilla = parseInt(filaR[21]) || 0;
-      
-      // Si el número en la planilla es 2 o más, se activa la alerta crítica automáticamente
       let alertaCritica = (mesesDebidosPlanilla >= 2);
       
       listaJugadores.push({
         nombre: nombre,
         formaPago: formaPago,
+        ultimoPago: ultimoPagoTexto, // <-- ACÁ ENVIAMOS EL DATO DE LA COLUMNA AC
         descuento: descuento,
         periodoDesc: periodoDesc,
         total: totalDeuda,
