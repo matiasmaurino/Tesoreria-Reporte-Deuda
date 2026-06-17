@@ -1,11 +1,8 @@
-// ID de la carpeta principal de Tesorería provisto por el usuario
 const CARPETA_RAIZ_ID = '1pqMjUjZ-K4Bo3lC-kSYDaGjAUxQSaRrN';
-// ID del archivo de Google Sheets de destino
 const SPREADSHEET_DESTINO_ID = '1OQ-BGFqYxEqy1UR6YkREXnVqwaNiFmLVEWW_Q_SB50k';
-// NUEVO: ID de la carpeta específica de Matrículas provisto por el usuario
 const CARPETA_MATRICULAS_ID = '1R-s385voSUlgo33xa8pqpuc_KEUEKdZS';
-// ======= AGREGA ESTA LÍNEA AQUÍ =======
 const CARPETA_FICHAJES_ID = '1YrzDCmhVjcE3_qv_uUjeNq_UqFaob_DW';
+const CARPETA_INGRESOS_ID = '1wVdejUgqYbgLDN1J9m4Nbjp9nvikpaMG';
 
 /**
  * 1. Crea el menú "Club online" al abrir la hoja de cálculo.
@@ -14,6 +11,7 @@ function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Club online')
     .addItem('Actualizar Todo 🔄', 'actualizarTodo')
+    .addItem('Actualizar Ingresos Mensuales 💰', 'actualizarIngresos') 
     .addSeparator()
     .addItem('Enviar Mails a Deudores ✉️', 'enviarMailsDeudores')
     .addItem('Generar Plantillas WhatsApp 💬', 'generarPlantillasWhatsApp')
@@ -30,23 +28,18 @@ function onOpen() {
  */
 function actualizarTodo() {
   try {
-    // 1. Ejecuta actualización de socios
     actualizarSocios();
     
-    // 2. Ejecuta antigüedad de deuda
     actualizarAntiguedadDeuda();
 
-    // 3. Ejecuta la importación y conversión de Matrículas
     actualizarMatriculas();
 
-    // 4. Ejecuta la importación de Fichajes
     actualizarFichajes();
+
     
-    // Dejamos un registro interno en la consola en lugar de un cartel emergente
     Logger.log('Proceso completado correctamente de manera silenciosa.');
     
   } catch (error) {
-    // En caso de error de ejecución, se guardará en los registros de Google Apps Script
     Logger.log('Hubo un problema durante la actualización: ' + error.toString());
   }
 }
@@ -950,4 +943,158 @@ function verificarCredencialesTecnico(categoria, contraseniaIntroducida) {
   }
   
   return { exito: false, mensaje: "La categoría seleccionada no fue encontrada." };
+}
+/**
+ * FUNCIÓN ACTUALIZADA: Procesa todos los archivos de la carpeta Ingresos.
+ * - Copia absolutamente TODAS las filas desde la fila 7 hasta la última celda de cada archivo.
+ * - Separa la Columna E (Cuenta) en dos columnas en base al paréntesis "( )".
+ * - Limpia y recorta la Columna H (columna G en el índice) eliminando todo lo posterior al símbolo ">".
+ * - Aplica reemplazo estricto para "Ingreso en Cuenta de Entidad Financiera > Pagos Virtuales del Sur..." por "Debito Automatico".
+ * - Pega el bloque de corrido uno abajo del otro en la hoja 'Ingresos', desde la fila 2 en adelante.
+ */
+function actualizarIngresos() {
+  const nombreHojaDestino = "Ingresos";
+  const ssDestino = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
+  let hojaDestino = ssDestino.getSheetByName(nombreHojaDestino);
+  
+  if (!hojaDestino) {
+    hojaDestino = ssDestino.insertSheet(nombreHojaDestino);
+  }
+
+  // Localizar y recorrer la carpeta de Ingresos en Google Drive
+  const carpetaOrigen = DriveApp.getFolderById(CARPETA_INGRESOS_ID);
+  const archivos = carpetaOrigen.getFiles();
+  let archivosProcesadosContador = 0;
+  
+  while (archivos.hasNext()) {
+    const archivo = archivos.next();
+    const nombreArchivo = archivo.getName().toLowerCase();
+    
+    // Validar que sea un archivo Excel
+    if (nombreArchivo.endsWith('.xls') || nombreArchivo.endsWith('.xlsx')) {
+      let tempFileId = null;
+      try {
+        // Conversión temporal interna a formato Google Sheets para poder estructurar la lectura de rangos
+        const blob = archivo.getBlob();
+        const config = { title: archivo.getName() + '_temp_ingresos', mimeType: MimeType.GOOGLE_SHEETS };
+        const tempFile = Drive.Files.create(config, blob);
+        tempFileId = tempFile.id;
+        
+        const tempSpreadsheet = SpreadsheetApp.openById(tempFileId);
+        const hojaOrigen = tempSpreadsheet.getSheets()[0];
+        const datosOrigen = hojaOrigen.getDataRange().getValues();
+        
+        const filaInicioDatosOriginal = 7; // Fila 7 real (Índice 6 en la matriz)
+        
+        if (datosOrigen.length >= filaInicioDatosOriginal) {
+          
+          // Si la hoja destino está vacía, armamos la cabecera en la Fila 1 adaptada al desglose de cuenta
+          if (hojaDestino.getLastRow() === 0) {
+            const encabezadosPorDefecto = [["Fecha", "Nº Comprobante", "Detalle / Cliente", "Categoría", "Cuenta Nombre", "Cuenta Detalle ( )", "Importe", "Concepto", "Forma de Pago"]];
+            hojaDestino.getRange(1, 1, 1, encabezadosPorDefecto[0].length).setValues(encabezadosPorDefecto);
+          }
+          
+          const registrosAAgregar = [];
+          
+          // Recorremos y extraemos TODAS las filas desde la 7
+          for (let i = filaInicioDatosOriginal - 1; i < datosOrigen.length; i++) {
+            const filaOriginal = datosOrigen[i];
+            
+            // Formateo rápido para celdas tipo fecha (Columna A)
+            let fechaValor = filaOriginal[0];
+            if (fechaValor instanceof Date) {
+              fechaValor = Utilities.formatDate(fechaValor, "America/Argentina/Buenos_Aires", "dd/MM/yyyy");
+            }
+            
+            // ---- REQUERIMIENTO ANTERIOR: SEPARACIÓN DE LA COLUMNA E (Índice 4) ----
+            let cuentaTextoOriginal = filaOriginal[4] ? filaOriginal[4].toString().trim() : "";
+            let parteTextoInicial = cuentaTextoOriginal;
+            let parteDentroParentesis = "";
+            
+            const coincidenciaParentesis = cuentaTextoOriginal.match(/(.*?)\((.*?)\)/);
+            if (coincidenciaParentesis) {
+              parteTextoInicial = coincidenciaParentesis[1].trim();     
+              parteDentroParentesis = coincidenciaParentesis[2].trim(); 
+            }
+            // ------------------------------------------------------------------------
+            
+            // ---- NUEVO REQUERIMIENTO: LIMPIEZA DE LA COLUMNA H (Índice 6 en la fila original) ----
+            let textoColumnaH = filaOriginal[6] ? filaOriginal[6].toString().trim() : "";
+
+// 1. REGLA DEL > (Se ejecuta primero: corta el texto si tiene el símbolo)
+if (textoColumnaH.includes(">")) {
+  textoColumnaH = textoColumnaH.split(">")[0].trim();
+}
+
+// 2. REEMPLAZO DE TEXTO (Se ejecuta segundo: evalúa la frase ya recortada)
+if (textoColumnaH === "Ingreso en Cuenta de Entidad Financiera") {
+  textoColumnaH = "Debito Automatico";
+}
+            // --------------------------------------------------------------------------------------
+            
+            // Reconstruimos la fila para inyectar en la sábana contigua de destino
+            const nuevaFilaMatriz = [];
+            
+            for (let j = 0; j < filaOriginal.length; j++) {
+              if (j === 0) {
+                nuevaFilaMatriz.push(fechaValor ? fechaValor : ""); // Fecha formateada
+              } else if (j === 4) {
+                // En la posición de la columna E original, metemos los dos campos del desglose
+                nuevaFilaMatriz.push(parteTextoInicial);
+                nuevaFilaMatriz.push(parteDentroParentesis);
+              } else if (j === 6) {
+                // En la posición de la columna H original (índice 6), metemos el nuevo texto limpio
+                nuevaFilaMatriz.push(textoColumnaH);
+              } else {
+                nuevaFilaMatriz.push(filaOriginal[j]);
+              }
+            }
+            
+            registrosAAgregar.push(nuevaFilaMatriz);
+          }
+          
+          // Inyección contigua en la parte inferior de la hoja 'Ingresos'
+          if (registrosAAgregar.length > 0) {
+            let filaInsercion = hojaDestino.getLastRow() + 1;
+            if (filaInsercion < 2) {
+              filaInsercion = 2; // Respetamos encabezados
+            }
+            
+            // Pega de golpe todo el bloque de filas transformadas
+            hojaDestino.getRange(filaInsercion, 1, registrosAAgregar.length, registrosAAgregar[0].length).setValues(registrosAAgregar);
+            archivosProcesadosContador++;
+            
+            // =================================================================
+            // REGISTRO AUDITORÍA: Guarda el historial en la hoja "Aux" (Columna J)
+            // =================================================================
+            let hojaAux = ssDestino.getSheetByName('Aux');
+            if (!hojaAux) hojaAux = ssDestino.insertSheet('Aux');
+            
+            const valoresJ = hojaAux.getRange("J:J").getValues();
+            let ultimaFilaJ = 0;
+            for (let f = valoresJ.length - 1; f >= 0; f--) {
+              if (valoresJ[f][0] !== "") {
+                ultimaFilaJ = f + 1;
+                break;
+              }
+            }
+            let filaGuardadoAux = ultimaFilaJ === 0 ? 1 : ultimaFilaJ + 1;
+            hojaAux.getRange(filaGuardadoAux, 10).setValue(nombreHojaDestino + ": " + archivo.getName());
+            // =================================================================
+          }
+        }
+        
+        eliminarArchivoTemporal(tempFileId);
+      } catch (error) {
+        if (tempFileId) eliminarArchivoTemporal(tempFileId);
+        Logger.log('Error procesando archivo de ingresos ' + archivo.getName() + ': ' + error.message);
+      }
+    }
+  }
+  
+  if (archivosProcesadosContador > 0) {
+    ssDestino.toast('Se importaron los ingresos limpiando y recortando la columna H.', '¡Éxito!');
+  } else {
+    ssDestino.toast('No se encontraron archivos de Excel para procesar.', 'Aviso');
+  }
 }
