@@ -290,9 +290,10 @@ function obtenerDeudasPorDivision(divisionBuscada) {
   const hojaReporte = ss.getSheetByName('Reporte');
   if (!hojaReporte) return { nombresMeses: [], listaJugadores: [] };
   
-  // Forzamos explícitamente la lectura de las 29 columnas (hasta AC) para evitar recortes automáticos
+  // Forzamos explícitamente la lectura de las 29 columnas (hasta AC)
+  // Usamos getDisplayValues() para traer el texto exacto visible en la pantalla (evita problemas de formato)
   const ultimaFila = hojaReporte.getLastRow();
-  const datosReporte = hojaReporte.getRange(1, 1, ultimaFila, 29).getValues();
+  const datosReporte = hojaReporte.getRange(1, 1, ultimaFila, 29).getDisplayValues();
   
   let nombresMeses = [];
   for (let col = 12; col <= 18; col++) { 
@@ -313,29 +314,29 @@ function obtenerDeudasPorDivision(divisionBuscada) {
     if (divisionFilaLimpia !== "" && divisionFilaLimpia.includes(buscarLimpio)) {
       
       let totalDeuda = parseFloat(filaR[20]) || 0; 
-      let matriculaValor = Math.abs(parseFloat(filaR[23])) || 0; 
+      // Si usás getDisplayValues, los valores financieros pueden venir con el signo $ o puntos, 
+      // por lo que limpiamos cualquier carácter extraño antes de convertirlos a número
+      let matriculaTexto = filaR[23].toString().replace(/[^0-9.,-]/g, "").replace(",", ".");
+      let matriculaValor = Math.abs(parseFloat(matriculaTexto)) || 0; 
       
       if (totalDeuda < 0 && matriculaValor <= 0) continue;
       let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre";
       let formaPago = filaR[6] ? filaR[6].toString().trim() : "-";
       
-      // Procesamiento seguro de la columna AC (Índice 28)
+      // Procesamiento directo y seguro del texto de la columna AC (Índice 28)
       let ultimoPagoValor = filaR[28];
       let ultimoPagoFormateado = "-";
-      if (ultimoPagoValor) {
-        if (ultimoPagoValor instanceof Date) {
-          ultimoPagoFormateado = Utilities.formatDate(ultimoPagoValor, "America/Argentina/Buenos_Aires", "dd/MM/yyyy");
-        } else {
-          let textoFecha = ultimoPagoValor.toString().trim();
-          ultimoPagoFormateado = textoFecha !== "" ? textoFecha : "-";
-        }
+      if (ultimoPagoValor && ultimoPagoValor.toString().trim() !== "") {
+        ultimoPagoFormateado = ultimoPagoValor.toString().trim();
       }
       
       let descuento = filaR[8] ? filaR[8].toString().trim() : "";
       let periodoDesc = filaR[9] ? filaR[9].toString().trim() : "";
+      
       let valoresMeses = [];
       for (let col = 12; col <= 18; col++) {
-        valoresMeses.push(parseFloat(filaR[col]) || 0);
+        let montoTexto = filaR[col].toString().replace(/[^0-9.,-]/g, "").replace(",", ".");
+        valoresMeses.push(parseFloat(montoTexto) || 0);
       }
       
       let mesesDebidosPlanilla = parseInt(filaR[21]) || 0;
