@@ -410,22 +410,22 @@ function renderizarTarjetasFiltradas() {
         let contadorVisualizados = 0;
 
         jugadores.forEach(function(j) {
-          let mesesDebidos = 0;
+          let mesesDebidosInterno = 0;
           j.valoresMeses.forEach(function(monto) {
-            if (monto > 0) mesesDebidos++;
+            if (monto > 0) mesesDebidosInterno++;
           });
           
-          if (filtroMorosidadActual === '1cuota' && mesesDebidos !== 1) return;
-          if (filtroMorosidadActual === '2mas' && mesesDebidos < 2) return;
+          if (filtroMorosidadActual === '1cuota' && mesesDebidosInterno !== 1) return;
+          if (filtroMorosidadActual === '2mas' && mesesDebidosInterno < 2) return;
           
           contadorVisualizados++;
           
           let divTarjeta = document.createElement('div');
           
           let claseBorde = '';
-          if (mesesDebidos === 1) {
+          if (mesesDebidosInterno === 1) {
             claseBorde = ' tarjeta-advertencia';
-          } else if (mesesDebidos >= 2) {
+          } else if (mesesDebidosInterno >= 2) {
             claseBorde = ' tarjeta-alerta';
           }
           divTarjeta.className = 'tarjeta-jugador' + claseBorde;
@@ -447,22 +447,26 @@ function renderizarTarjetasFiltradas() {
               </div>`;
           }
 
-          // UBICACIÓN INYECTADA: Forzamos el Último Pago abajo del nombre de forma directa y visible
           divTarjeta.innerHTML = `
               <div class="d-flex justify-content-between align-items-center mb-2">
-                <div class="text-start">
-                  <span class="fw-bold text-dark" style="font-size: 1.05rem; display: block;">${j.nombre}</span>
-                  <small class="text-muted" style="font-size: 0.75rem; display: block; margin-top: 2px;">Último Pago registrado: <b style="color: #dc3545 !important;">${j.ultimoPago || '-'}</b></small>
-                </div>
+                <span class="fw-bold text-dark" style="font-size: 1.05rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
                 ${j.alerta ? '<span class="badge-critico">🔴 Debe 2 ó más meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
               </div>
               
               <div class="row g-1 border-top pt-2 mt-1 text-start">
                 ${bloquesMesesHTML}
+                
                 <div class="col-4 col-sm-3 mb-1">
                   <span class="text-secondary" style="font-size: 0.72rem; font-weight: bold;">Matrícula</span><br>
                   <span class="${j.matricula > 0 ? 'text-primary' : 'text-muted'}" style="font-size: 0.82rem; font-weight: 700;">
                     ${formateador.format(j.matricula)}
+                  </span>
+                </div>
+
+                <div class="col-4 col-sm-3 mb-1">
+                  <span class="text-secondary" style="font-size: 0.72rem; font-weight: bold;">Último Pago</span><br>
+                  <span style="font-size: 0.82rem; font-weight: 700; color: #212529 !important;">
+                    ${j.ultimoPago}
                   </span>
                 </div>
               </div>
@@ -483,10 +487,7 @@ function renderizarTarjetasFiltradas() {
         });
         
         if (contadorVisualizados === 0) {
-          let msg = "No hay jugadores en esta condición para el filtro seleccionado.";
-          if (filtroMorosidadActual === '1cuota') msg = "No hay ningún jugador que deba exactamente 1 cuota.";
-          if (filtroMorosidadActual === '2mas') msg = "No hay ningún jugador moroso con 2 o más cuotas vencidas.";
-          contenedor.innerHTML = `<div class="alert alert-light text-center shadow-sm text-muted">${msg}</div>`;
+          contenedor.innerHTML = '<div class="alert alert-light text-center shadow-sm text-muted">No hay jugadores en esta condición para el filtro seleccionado.</div>';
         }
       }
 
@@ -522,22 +523,26 @@ function renderizarTarjetasFiltradas() {
               </div>`;
           }
 
-          // UBICACIÓN INYECTADA: Forzamos el Último Pago abajo del nombre de forma directa y visible
           divTarjeta.innerHTML = `
             <div class="d-flex justify-content-between align-items-center mb-2">
-              <div class="text-start">
-                <span class="fw-bold text-dark" style="font-size: 1.05rem; display: block;">${j.nombre}</span>
-                <small class="text-muted" style="font-size: 0.75rem; display: block; margin-top: 2px;">Último Pago registrado: <b style="color: #dc3545 !important;">${j.ultimoPago || '-'}</b></small>
-              </div>
+              <span class="fw-bold text-dark" style="font-size: 1.05rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
               ${j.alerta ? '<span class="badge-critico">🔴 Debe 2 ó más meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
             </div>
             
             <div class="row g-1 border-top pt-2 mt-1 text-start">
               ${bloquesMesesHTML}
+              
               <div class="col-4 col-sm-3 mb-1">
                 <span class="text-secondary" style="font-size: 0.72rem; font-weight: bold;">Matrícula</span><br>
                 <span class="${j.matricula > 0 ? 'text-primary' : 'text-muted'}" style="font-size: 0.82rem; font-weight: 700;">
                   ${formateador.format(j.matricula)}
+                </span>
+              </div>
+
+              <div class="col-4 col-sm-3 mb-1">
+                <span class="text-secondary" style="font-size: 0.72rem; font-weight: bold;">Último Pago</span><br>
+                <span style="font-size: 0.82rem; font-weight: 700; color: #212529 !important;">
+                  ${j.ultimoPago}
                 </span>
               </div>
             </div>
@@ -556,9 +561,7 @@ function renderizarTarjetasFiltradas() {
           `;
           contenedor.appendChild(divTarjeta);
         });
-      }
-
-function descargarPDF() {
+      }function descargarPDF() {
         let divisionSeleccionada = document.getElementById('selectDivision').value;
         let tituloOriginal = document.title;
         document.title = "Reporte_Deudas_" + divisionSeleccionada.replace(/[^a-zA-Z0-9]/g, "_");
