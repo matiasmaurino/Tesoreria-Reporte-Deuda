@@ -387,7 +387,7 @@
         renderizarTarjetas(listaFiltrada, mesesReales);
       }
 
-      function renderizarTarjetasFiltradas() {
+function renderizarTarjetasFiltradas() {
         let contenedor = document.getElementById('contenedorTarjetas');
         let btnPdf = document.getElementById('btnPdf');
         contenedor.innerHTML = '';
@@ -447,10 +447,14 @@
               </div>`;
           }
 
+          // UBICACIÓN INYECTADA: Forzamos el Último Pago abajo del nombre de forma directa y visible
           divTarjeta.innerHTML = `
               <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="fw-bold text-dark" style="font-size: 1.05rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
-                ${j.alerta ? '<span class="badge-critico">🔴 Debe más de 2 meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
+                <div class="text-start">
+                  <span class="fw-bold text-dark" style="font-size: 1.05rem; display: block;">${j.nombre}</span>
+                  <small class="text-muted" style="font-size: 0.75rem; display: block; margin-top: 2px;">Último Pago registrado: <b style="color: #dc3545 !important;">${j.ultimoPago || '-'}</b></small>
+                </div>
+                ${j.alerta ? '<span class="badge-critico">🔴 Debe 2 ó más meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
               </div>
               
               <div class="row g-1 border-top pt-2 mt-1 text-start">
@@ -463,11 +467,8 @@
                 </div>
               </div>
 
-              <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem;">
-                <div class="d-flex justify-content-between">
-                  <div><strong>Forma de Pago:</strong> ${j.formaPago}</div>
-                  <div><strong>Último Pago:</strong> <span class="text-dark fw-bold">${j.ultimoPago ? j.ultimoPago : '-'}</span></div>
-                </div>
+              <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem; text-align: left;">
+                <div><strong>Forma de Pago:</strong> ${j.formaPago}</div>
                 ${bloqueDescuento}
               </div>
 
@@ -521,10 +522,14 @@
               </div>`;
           }
 
+          // UBICACIÓN INYECTADA: Forzamos el Último Pago abajo del nombre de forma directa y visible
           divTarjeta.innerHTML = `
             <div class="d-flex justify-content-between align-items-center mb-2">
-              <span class="fw-bold text-dark" style="font-size: 1.05rem; max-width: 60%; display: inline-block;">${j.nombre}</span>
-              ${j.alerta ? '<span class="badge-critico">🔴 Debe más de 2 meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
+              <div class="text-start">
+                <span class="fw-bold text-dark" style="font-size: 1.05rem; display: block;">${j.nombre}</span>
+                <small class="text-muted" style="font-size: 0.75rem; display: block; margin-top: 2px;">Último Pago registrado: <b style="color: #dc3545 !important;">${j.ultimoPago || '-'}</b></small>
+              </div>
+              ${j.alerta ? '<span class="badge-critico">🔴 Debe 2 ó más meses</span>' : '<span class="badge-regular">✓ Regular</span>'}
             </div>
             
             <div class="row g-1 border-top pt-2 mt-1 text-start">
@@ -537,11 +542,8 @@
               </div>
             </div>
 
-            <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem;">
-              <div class="d-flex justify-content-between">
-                <div><strong>Forma de Pago:</strong> ${j.formaPago}</div>
-                <div><strong>Último Pago:</strong> <span class="text-dark fw-bold">${j.ultimoPago ? j.ultimoPago : '-'}</span></div>
-              </div>
+            <div class="border-top pt-2 mt-2 small text-secondary" style="font-size: 0.8rem; text-align: left;">
+              <div><strong>Forma de Pago:</strong> ${j.formaPago}</div>
               ${bloqueDescuento}
             </div>
 
@@ -555,6 +557,7 @@
           contenedor.appendChild(divTarjeta);
         });
       }
+
 function descargarPDF() {
         let divisionSeleccionada = document.getElementById('selectDivision').value;
         let tituloOriginal = document.title;
