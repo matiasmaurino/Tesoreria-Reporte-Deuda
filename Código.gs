@@ -267,11 +267,27 @@ function obtenerDeudasPorDivision(divisionBuscada) {
   const ultimaFila = hojaReporte.getLastRow();
   if (ultimaFila <= 1) return { nombresMeses: [], listaJugadores: [] };
   
-  // 1. Matriz principal numérica (A hasta X)
-  const datosReporte = hojaReporte.getRange(1, 1, ultimaFila, 24).getValues();
+  // 1. Ampliamos la matriz principal numérica de A hasta AE (31 columnas en vez de 24)
+  const datosReporte = hojaReporte.getRange(1, 1, ultimaFila, 31).getValues();
   
   // 2. Traemos la columna AC (Columna 29) estrictamente como texto visual amigable
   const rangoUltimoPago = hojaReporte.getRange(1, 29, ultimaFila, 1).getDisplayValues();
+  
+  // 3. NUEVO: Cargamos la hoja de Ingresos para mapear quiénes pagaron la matrícula
+  const hojaIngresos = ss.getSheetByName("Ingresos");
+  let sociosConMatriculaPaga = {};
+  
+  if (hojaIngresos) {
+    const datosIngresos = hojaIngresos.getDataRange().getValues();
+    for (let i = 1; i < datosIngresos.length; i++) {
+      let socioIngreso = String(datosIngresos[i][5]).trim(); // Columna F (Socio) es índice 5
+      let concepto = String(datosIngresos[i][8]).trim();     // Columna I (Concepto) es índice 8
+      
+      if (concepto === "Matriculas y Pases | Matricula") {
+        sociosConMatriculaPaga[socioIngreso] = true;
+      }
+    }
+  }
   
   let nombresMeses = [];
   for (let col = 12; col <= 18; col++) { 
@@ -292,7 +308,15 @@ function obtenerDeudasPorDivision(divisionBuscada) {
     if (divisionFilaLimpia !== "" && divisionFilaLimpia.includes(buscarLimpio)) {
       
       let totalDeuda = parseFloat(filaR[20]) || 0; 
-      let matriculaValor = Math.abs(parseFloat(filaR[23])) || 0; 
+      
+      // NUEVA LÓGICA PARA MATRÍCULA: 
+      // Buscamos el id de socio en Columna A (índice 0)
+      let numSocio = String(filaR[0]).trim(); 
+      // Columna AE es el índice 30 (A=0, B=1 ... AE=30)
+      let valorAE = Math.abs(parseFloat(filaR[30])) || 0; 
+      
+      // Si figura en Ingresos con matrícula paga, toma el valor de AE. Si no, va 0.
+      let matriculaValor = sociosConMatriculaPaga[numSocio] ? valorAE : 0;
       
       if (totalDeuda < 0 && matriculaValor <= 0) continue;
       let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre";
@@ -321,13 +345,13 @@ function obtenerDeudasPorDivision(divisionBuscada) {
       listaJugadores.push({
         nombre: nombre,
         formaPago: formaPago,
-        ultimoPago: ultimoPagoTexto, // <-- ACÁ ENVIAMOS EL DATO DE LA COLUMNA AC
+        ultimoPago: ultimoPagoTexto,
         descuento: descuento,
         periodoDesc: periodoDesc,
         total: totalDeuda,
         valoresMeses: valoresMeses, 
         alerta: alertaCritica,
-        matricula: matriculaValor
+        matricula: matriculaValor // <-- Enviamos el valor adaptado de la columna AE
       });
     }
   }
