@@ -6,6 +6,8 @@ const SPREADSHEET_DESTINO_ID = '1OQ-BGFqYxEqy1UR6YkREXnVqwaNiFmLVEWW_Q_SB50k';
 const CARPETA_MATRICULAS_ID = '1R-s385voSUlgo33xa8pqpuc_KEUEKdZS';
 // ======= AGREGA ESTA LÍNEA AQUÍ =======
 const CARPETA_FICHAJES_ID = '1YrzDCmhVjcE3_qv_uUjeNq_UqFaob_DW';
+// NUEVO: Nombre de la hoja de control de importaciones
+const HOJA_CONTROL_IMPORTACIONES = 'ImportacionArchivosClubOnline';
 
 /**
  * 1. Crea el menú "Club online" al abrir la hoja de cálculo.
@@ -19,6 +21,28 @@ function onOpen() {
     .addItem('Generar Plantillas WhatsApp 💬', 'generarPlantillasWhatsApp')
     .addItem('Generar PDFs de Planteles 📄', 'generarPdfPlantelesMasivo')
     .addToUi();
+}
+
+/**
+ * NUEVA FUNCIÓN: Registra en la hoja "ImportacionArchivosClubOnline" el nombre
+ * del archivo importado y la fecha/hora de importación.
+ * Columna A: Nombre archivo | Columna B: Fecha importacion
+ */
+function registrarImportacionClubOnline(nombreArchivo) {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
+    let hojaControl = ss.getSheetByName(HOJA_CONTROL_IMPORTACIONES);
+
+    if (!hojaControl) {
+      hojaControl = ss.insertSheet(HOJA_CONTROL_IMPORTACIONES);
+      hojaControl.getRange(1, 1, 1, 2).setValues([["Nombre archivo", "Fecha importacion"]]).setFontWeight("bold");
+    }
+
+    const fecha = Utilities.formatDate(new Date(), "America/Argentina/Buenos_Aires", "dd/MM/yyyy HH:mm:ss");
+    hojaControl.appendRow([nombreArchivo, fecha]);
+  } catch (error) {
+    Logger.log('Error al registrar la importación en el control: ' + error.message);
+  }
 }
 
 /**
@@ -41,6 +65,9 @@ function actualizarTodo() {
 
     // 4. Ejecuta la importación de Fichajes
     actualizarFichajes();
+
+// 5. Ejecuta la importación de Ingresos
+    actualizarIngresos();
     
     // Dejamos un registro interno en la consola en lugar de un cartel emergente
     Logger.log('Proceso completado correctamente de manera silenciosa.');
@@ -198,6 +225,12 @@ function procesarUltimoArchivo(idCarpetaOrigen, nombreSubcarpeta, nombreHojaDest
     let registroTexto = nombreHojaDestino + ": " + ultimoArchivo.getName();
     hojaAux.getRange(filaGuardado, 10).setValue(registroTexto); // Escribe en la columna J (10)
     // =================================================================
+
+    // =================================================================
+    // NUEVO REQUERIMIENTO: REGISTRO EN HOJA "ImportacionArchivosClubOnline"
+    // =================================================================
+    registrarImportacionClubOnline(ultimoArchivo.getName());
+    // =================================================================
     
     eliminarArchivoTemporal(tempFile.id);
     ssDestino.toast('Hoja de "' + nombreHojaDestino + '" actualizada.', '¡Éxito!');
@@ -267,27 +300,11 @@ function obtenerDeudasPorDivision(divisionBuscada) {
   const ultimaFila = hojaReporte.getLastRow();
   if (ultimaFila <= 1) return { nombresMeses: [], listaJugadores: [] };
   
-  // 1. Ampliamos la matriz principal numérica de A hasta AE (31 columnas en vez de 24)
+  // 1. Traemos desde la columna A hasta la AE de forma segura (31 columnas)
   const datosReporte = hojaReporte.getRange(1, 1, ultimaFila, 31).getValues();
   
   // 2. Traemos la columna AC (Columna 29) estrictamente como texto visual amigable
   const rangoUltimoPago = hojaReporte.getRange(1, 29, ultimaFila, 1).getDisplayValues();
-  
-  // 3. NUEVO: Cargamos la hoja de Ingresos para mapear quiénes pagaron la matrícula
-  const hojaIngresos = ss.getSheetByName("Ingresos");
-  let sociosConMatriculaPaga = {};
-  
-  if (hojaIngresos) {
-    const datosIngresos = hojaIngresos.getDataRange().getValues();
-    for (let i = 1; i < datosIngresos.length; i++) {
-      let socioIngreso = String(datosIngresos[i][5]).trim(); // Columna F (Socio) es índice 5
-      let concepto = String(datosIngresos[i][8]).trim();     // Columna I (Concepto) es índice 8
-      
-      if (concepto === "Matriculas y Pases | Matricula") {
-        sociosConMatriculaPaga[socioIngreso] = true;
-      }
-    }
-  }
   
   let nombresMeses = [];
   for (let col = 12; col <= 18; col++) { 
@@ -309,14 +326,9 @@ function obtenerDeudasPorDivision(divisionBuscada) {
       
       let totalDeuda = parseFloat(filaR[20]) || 0; 
       
-      // NUEVA LÓGICA PARA MATRÍCULA: 
-      // Buscamos el id de socio en Columna A (índice 0)
-      let numSocio = String(filaR[0]).trim(); 
+      // LÓGICA DIRECTA PARA MATRÍCULA DESDE AE:
       // Columna AE es el índice 30 (A=0, B=1 ... AE=30)
-      let valorAE = Math.abs(parseFloat(filaR[30])) || 0; 
-      
-      // Si figura en Ingresos con matrícula paga, toma el valor de AE. Si no, va 0.
-      let matriculaValor = sociosConMatriculaPaga[numSocio] ? valorAE : 0;
+      let matriculaValor = Math.abs(parseFloat(filaR[30])) || 0; 
       
       if (totalDeuda < 0 && matriculaValor <= 0) continue;
       let nombre = filaR[19] ? filaR[19].toString().trim() : "Sin Nombre";
@@ -351,7 +363,7 @@ function obtenerDeudasPorDivision(divisionBuscada) {
         total: totalDeuda,
         valoresMeses: valoresMeses, 
         alerta: alertaCritica,
-        matricula: matriculaValor // <-- Enviamos el valor adaptado de la columna AE
+        matricula: matriculaValor // <-- Envía el valor directo de la columna AE a la web
       });
     }
   }
@@ -544,6 +556,12 @@ function actualizarFichajes() {
           
           // Escribimos el bloque limpio de 7 columnas de ancho (A hasta G)
           hojaDestino.getRange(filaInsercion, 1, registrosAAgregar.length, 7).setValues(registrosAAgregar);
+
+          // =================================================================
+          // NUEVO REQUERIMIENTO: REGISTRO EN HOJA "ImportacionArchivosClubOnline"
+          // =================================================================
+          registrarImportacionClubOnline(archivo.getName());
+          // =================================================================
         }
         
         eliminarArchivoTemporal(tempFileId);
@@ -953,3 +971,9 @@ function verificarCredencialesTecnico(categoria, contraseniaIntroducida) {
   
   return { exito: false, mensaje: "La categoría seleccionada no fue encontrada." };
 }
+
+/**
+ * Importa los archivos de la carpeta de Ingresos acumulándolos en la hoja "Ingresos"
+ * a partir de la fila 7, pegando solo en las columnas A:O (15 columnas) para preservar
+ * los cálculos/fórmulas existentes a partir de la columna P.
+ */
