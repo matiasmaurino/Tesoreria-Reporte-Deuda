@@ -1,5 +1,5 @@
 // ID de la carpeta principal de Tesorería provisto por el usuario
-const CARPETA_RAIZ_ID = '1pqMjUjZ-K4Bo3lC-kSYDaGjAUxQSaRrN';
+const CARPETA_RAIZ_ID = '1vbH7Xgpz2p2NET-G-i80IBEwSzTgtyq7';
 // ID del archivo de Google Sheets de destino
 const SPREADSHEET_DESTINO_ID = '1OQ-BGFqYxEqy1UR6YkREXnVqwaNiFmLVEWW_Q_SB50k';
 // NUEVO: ID de la carpeta específica de Matrículas provisto por el usuario
@@ -80,7 +80,7 @@ function actualizarTodo() {
 function actualizarSocios() {
   const nombreCarpeta = "Socios";
   const nombreHojaDestino = "Socios";
-  const columnasAMantener = [1, 2, 3, 5, 9, 11, 16, 22, 28, 29];
+  const columnasAMantener = [1, 2, 3, 5, 9, 11, 16, 22, 28, 29,6,17];
   const filaInicioOriginal = 6;
   // Enviamos true en un nuevo parámetro final para activar la limpieza de cadenas de pago
   procesarUltimoArchivo(CARPETA_RAIZ_ID, nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener, false, true);
