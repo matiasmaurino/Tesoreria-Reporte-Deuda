@@ -1,17 +1,18 @@
-/**
- * Importa los archivos de la carpeta de Ingresos acumulándolos en la hoja "Ingresos"
- * a partir de la fila 7, leyendo de la columna A a la M (13 columnas).
- */
 function actualizarIngresos() {
+  const TIEMPO_INICIO = new Date().getTime();
+  const LIMITE_MS = 5 * 60 * 1000;
+
   const ss = SpreadsheetApp.openById(SPREADSHEET_DESTINO_ID);
-  const CARPETA_INGRESOS_ID = '1wVdejUgqYbgLDN1J9m4Nbjp9nvikpaMG';
-  
+  const CARPETA_INGRESOS_ID = '1hKRtI2E_kTJY_Q51eKckTQ_dTU0MBE_q';
+  const NOMBRE_CARPETA_PROCESADOS = 'Procesados';
+  const MAX_ARCHIVOS_POR_TANDA = 1;
+  const FILA_INICIO_DATOS = 7;
+
   let hojaIngresos = ss.getSheetByName('Ingresos');
   if (!hojaIngresos) {
     hojaIngresos = ss.insertSheet('Ingresos');
   }
 
-  // Lista de control de importaciones
   const hojaControl = ss.getSheetByName(HOJA_CONTROL_IMPORTACIONES);
   let archivosProcesados = [];
   if (hojaControl && hojaControl.getLastRow() > 1) {
@@ -21,76 +22,85 @@ function actualizarIngresos() {
   }
 
   const carpeta = DriveApp.getFolderById(CARPETA_INGRESOS_ID);
+
+  // Buscar o crear la subcarpeta "Procesados"
+  let carpetaProcesados;
+  const subcarpetas = carpeta.getFoldersByName(NOMBRE_CARPETA_PROCESADOS);
+  if (subcarpetas.hasNext()) {
+    carpetaProcesados = subcarpetas.next();
+  } else {
+    carpetaProcesados = carpeta.createFolder(NOMBRE_CARPETA_PROCESADOS);
+  }
+
   const archivos = carpeta.getFiles();
 
-  let totalFilasImportadas = 0;
   let archivosIgnoradosPorDuplicado = 0;
   let archivosProcesadosEnEstaTanda = 0;
 
   while (archivos.hasNext()) {
+    if (new Date().getTime() - TIEMPO_INICIO > LIMITE_MS) {
+      Logger.log('Se acerca el límite de tiempo. Cortando ejecución de forma segura.');
+      break;
+    }
+
+    if (archivosProcesadosEnEstaTanda >= MAX_ARCHIVOS_POR_TANDA) break;
+
     const archivo = archivos.next();
     const nombreArchivo = archivo.getName().trim();
 
-    // Validar duplicado
+    // Si por algún motivo la subcarpeta "Procesados" aparece en la iteración, la salteamos
+    if (archivo.getId() === carpetaProcesados.getId()) continue;
+
     if (archivosProcesados.includes(nombreArchivo)) {
       archivosIgnoradosPorDuplicado++;
       continue;
     }
 
+    let archivoConvertidoId = null;
+
     try {
-      let datosArchivo = [];
-      const mimeType = archivo.getMimeType();
+      const recursoConvertido = Drive.Files.copy(
+        { title: 'TEMP_' + nombreArchivo, mimeType: MimeType.GOOGLE_SHEETS },
+        archivo.getId(),
+        { convert: true }
+      );
+      archivoConvertidoId = recursoConvertido.id;
 
-      if (mimeType === MimeType.GOOGLE_SHEETS) {
-        const tempSS = SpreadsheetApp.open(archivo);
-        const tempSheet = tempSS.getSheets()[0];
-        if (tempSheet.getLastRow() >= 7) {
-          datosArchivo = tempSheet.getRange(7, 1, tempSheet.getLastRow() - 6, 13).getValues();
-        }
-      } else if (mimeType === MimeType.MICROSOFT_EXCEL || mimeType === MimeType.CSV) {
-        const blob = archivo.getBlob();
-        const config = { title: '[TEMP] ' + nombreArchivo, parents: [{ id: CARPETA_INGRESOS_ID }] };
-        const tempFile = Drive.Files.insert(config, blob, { convert: true });
-        const tempSS = SpreadsheetApp.openById(tempFile.id);
-        const tempSheet = tempSS.getSheets()[0];
+      const ssTemp = SpreadsheetApp.openById(archivoConvertidoId);
+      const hojaTemp = ssTemp.getSheets()[0];
+      const ultimaFila = hojaTemp.getLastRow();
+      const ultimaColumna = hojaTemp.getLastColumn();
 
-        if (tempSheet.getLastRow() >= 7) {
-          datosArchivo = tempSheet.getRange(7, 1, tempSheet.getLastRow() - 6, 13).getValues();
-        }
-
-        // Eliminar archivo temporal
-        Drive.Files.remove(tempFile.id);
+      if (ultimaFila >= FILA_INICIO_DATOS) {
+        const cantidadFilas = ultimaFila - FILA_INICIO_DATOS + 1;
+        const datos = hojaTemp.getRange(FILA_INICIO_DATOS, 1, cantidadFilas, ultimaColumna).getValues();
+        const filaDestino = hojaIngresos.getLastRow() + 1;
+        hojaIngresos.getRange(filaDestino, 1, datos.length, datos[0].length).setValues(datos);
+      } else {
+        Logger.log(`El archivo ${nombreArchivo} no tiene datos a partir de la fila ${FILA_INICIO_DATOS}.`);
       }
 
-      if (datosArchivo.length > 0) {
-        const valoresColumnaA = hojaIngresos.getRange("A:A").getValues();
-        let ultimaFilaA = 6;
-        for (let i = valoresColumnaA.length - 1; i >= 0; i--) {
-          if (valoresColumnaA[i][0] !== "" && valoresColumnaA[i][0] !== null) {
-            ultimaFilaA = Math.max(i + 1, 6);
-            break;
-          }
-        }
-
-        hojaIngresos.getRange(ultimaFilaA + 1, 1, datosArchivo.length, 13)
-          .setValues(datosArchivo);
-
-        registrarImportacionClubOnline(nombreArchivo);
-        totalFilasImportadas += datosArchivo.length;
-        archivosProcesadosEnEstaTanda++;
-        Logger.log(`✅ Archivo "${nombreArchivo}" importado exitosamente (${datosArchivo.length} filas).`);
+      if (hojaControl) {
+        hojaControl.appendRow([nombreArchivo, new Date()]);
       }
+
+      // Mover el archivo original a "Procesados"
+      archivo.moveTo(carpetaProcesados);
+
+      archivosProcesadosEnEstaTanda++;
+
     } catch (e) {
-      Logger.log('Error procesando el archivo ' + nombreArchivo + ': ' + e.toString());
+      Logger.log(`Error procesando el archivo ${nombreArchivo}: ${e.message}`);
+    } finally {
+      if (archivoConvertidoId) {
+        Drive.Files.remove(archivoConvertidoId);
+      }
     }
   }
 
-  // Alertas al finalizar
-  if (totalFilasImportadas > 0) {
-    SpreadsheetApp.getUi().alert(`✅ Importación completada.\nSe agregaron ${totalFilasImportadas} filas de ${archivosProcesadosEnEstaTanda} archivo(s).`);
-  } else if (archivosIgnoradosPorDuplicado > 0 && archivosProcesadosEnEstaTanda === 0) {
-    SpreadsheetApp.getUi().alert(`ℹ️ Los archivos de la carpeta ya figuran registrados en "ImportacionArchivosClubOnline".\nSi deseas reimportarlos, borra sus filas en esa pestaña.`);
-  } else {
-    SpreadsheetApp.getUi().alert(`⚠️ No se encontraron archivos o filas válidas desde la fila 7.`);
+  if (archivosProcesadosEnEstaTanda > 0) {
+    SpreadsheetApp.getUi().alert(`✅ Tanda completada: Se procesaron ${archivosProcesadosEnEstaTanda} archivo(s) correctamente.`);
+  } else if (archivosIgnoradosPorDuplicado > 0) {
+    SpreadsheetApp.getUi().alert(`ℹ️ No hay archivos nuevos. Se omitieron ${archivosIgnoradosPorDuplicado} archivo(s) ya procesados.`);
   }
 }
