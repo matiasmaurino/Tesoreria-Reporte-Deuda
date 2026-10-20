@@ -15,14 +15,21 @@ const HOJA_CONTROL_IMPORTACIONES = 'ImportacionArchivosClubOnline';
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Club online')
-    .addItem('Actualizar Todo 🔄', 'actualizarTodo')
+    .addItem('Actualizar Todo', 'actualizarTodo')
     .addSeparator()
-    .addItem('Enviar Mails a Deudores ✉️', 'enviarMailsDeudores')
-    .addItem('Generar Plantillas WhatsApp 💬', 'generarPlantillasWhatsApp')
-    .addItem('Generar PDFs de Planteles 📄', 'generarPdfPlantelesMasivo')
+    .addItem('Enviar Mails a Deudores', 'enviarMailsDeudores')
+    .addItem('Generar Plantillas WhatsApp', 'generarPlantillasWhatsApp')
+    .addItem('Generar PDFs de Planteles', 'generarPdfPlantelesMasivo')
+    .addToUi();
+
+   ui.createMenu('Análisis ingresos')
+    .addItem('Actualizar Informes', 'actualizarTodo')
+    .addItem('Solo ingresos por concepto', 'generarIngresosDetalle')
+    .addItem('Solo deuda esperada', 'generarDeudaEsperada')
+    .addSeparator()
+    .addItem('Programar actualización diaria', 'instalarTrigger')
     .addToUi();
 }
-
 /**
  * NUEVA FUNCIÓN: Registra en la hoja "ImportacionArchivosClubOnline" el nombre
  * del archivo importado y la fecha/hora de importación.
@@ -77,12 +84,26 @@ function actualizarTodo() {
     Logger.log('Hubo un problema durante la actualización: ' + error.toString());
   }
 }
+
 function actualizarSocios() {
   const nombreCarpeta = "Socios";
   const nombreHojaDestino = "Socios";
-  const columnasAMantener = [1, 2, 3, 5, 9, 11, 16, 22, 28, 29,6,17];
+  const columnasAMantener = [1, 2, 3, 5, 9, 11, 16, 22, 28, 29, 6, 17];
   const filaInicioOriginal = 6;
-  // Enviamos true en un nuevo parámetro final para activar la limpieza de cadenas de pago
+
+  // 1. Obtener la hoja de destino y limpiar los datos anteriores (a partir de la fila 6)
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const hoja = ss.getSheetByName(nombreHojaDestino);
+  
+  if (hoja) {
+    const ultimaFila = hoja.getLastRow();
+    if (ultimaFila >= filaInicioOriginal) {
+      // Limpia todo desde la fila 6 hasta el final, manteniendo encabezados
+      hoja.getRange(filaInicioOriginal, 1, ultimaFila - filaInicioOriginal + 1, hoja.getLastColumn()).clearContent();
+    }
+  }
+
+  // 2. Importar los socios actualizados desde el Excel
   procesarUltimoArchivo(CARPETA_RAIZ_ID, nombreCarpeta, nombreHojaDestino, filaInicioOriginal, columnasAMantener, false, true);
 }
 
