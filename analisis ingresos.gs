@@ -13,6 +13,9 @@
  *   La suma de lo asignado siempre da igual a la columna I.
  *   Cuando tengas la lista de precios real, se reemplaza el paso de tarifas estimadas.
  *
+ * En Ingresos_Detalle, la columna AB repite el texto original de la columna F
+ * de Ingresos (todos los conceptos del recibo) para poder controlar el reparto.
+ *
  * Columnas J, K, L y M de Ingresos se ignoran a propósito.
  */
 
@@ -81,6 +84,7 @@ function generarIngresosDetalle() {
       medio: medioPago_(r[ING.VALORES]),
       importe: aNumero_(r[ING.IMPORTE]),
       conceptos: conceptos,
+      conceptosTxt: txt,            // NUEVO: texto original de la columna F
       infoSocio: socios[socio] || {}
     });
   }
@@ -157,33 +161,34 @@ function generarIngresosDetalle() {
         : desfase < 0 ? 'Adelantado' : 'Al día';
 
       filas.push([
-        rc.nro,
-        fC || '',
-        fC ? fC.getFullYear() : '',
-        fC ? fC.getMonth() + 1 : '',
-        fC ? new Date(fC.getFullYear(), fC.getMonth(), 1) : '',
-        rc.caja,
-        rc.socio,
-        rc.cliente,
-        s.div || '',
-        s.desc || '',
-        s.perDesc || '',
-        s.desc ? 'Sí' : 'No',
-        rc.medio,
-        c.tipo,
-        c.detalle,
-        c.modalidad,
-        c.clave,
-        c.periodo || '',
-        c.periodo ? c.periodo.getFullYear() : '',
-        c.periodo ? c.periodo.getMonth() + 1 : '',
-        desfase,
-        situacion,
-        n,
-        rc.importe,
-        tarifas[k] ? tarifas[k].v : '',
-        asignado,
-        metodo
+        rc.nro,                                                   // A
+        fC || '',                                                 // B
+        fC ? fC.getFullYear() : '',                               // C
+        fC ? fC.getMonth() + 1 : '',                              // D
+        fC ? new Date(fC.getFullYear(), fC.getMonth(), 1) : '',   // E
+        rc.caja,                                                  // F
+        rc.socio,                                                 // G
+        rc.cliente,                                               // H
+        s.div || '',                                              // I
+        s.desc || '',                                             // J
+        s.perDesc || '',                                          // K
+        s.desc ? 'Sí' : 'No',                                     // L
+        rc.medio,                                                 // M
+        c.tipo,                                                   // N
+        c.detalle,                                                // O
+        c.modalidad,                                              // P
+        c.clave,                                                  // Q
+        c.periodo || '',                                          // R
+        c.periodo ? c.periodo.getFullYear() : '',                 // S
+        c.periodo ? c.periodo.getMonth() + 1 : '',                // T
+        desfase,                                                  // U
+        situacion,                                                // V
+        n,                                                        // W
+        rc.importe,                                               // X
+        tarifas[k] ? tarifas[k].v : '',                           // Y
+        asignado,                                                 // Z
+        metodo,                                                   // AA
+        rc.conceptosTxt                                           // AB: texto original col F de Ingresos
       ]);
     });
   });
@@ -193,8 +198,9 @@ function generarIngresosDetalle() {
     'Nº Socio', 'Cliente', 'Divisiones', 'Descuento/Recargo', 'Período Descuento', 'Tiene Descuento',
     'Medio de Pago', 'Tipo Concepto', 'Detalle', 'Modalidad / Código', 'Concepto',
     'Período Imputado', 'Año Imputado', 'Mes Imputado', 'Desfase Meses', 'Situación Pago',
-    'Cant. Conceptos Recibo', 'Importe Recibo', 'Tarifa Estimada', 'Importe Asignado', 'Método Asignación'
-  ], filas, { 2: 'dd/MM/yyyy', 5: 'MM/yyyy', 18: 'MM/yyyy', 24: '#,##0.00', 25: '#,##0.00', 26: '#,##0.00' });
+    'Cant. Conceptos Recibo', 'Importe Recibo', 'Tarifa Estimada', 'Importe Asignado', 'Método Asignación',
+    'Conceptos Original (col F)'
+  ], filas, { 2: 'dd/MM/yyyy', 5: 'MM/yyyy', 18: 'MM/yyyy', 24: '#,##0.00', 25: '#,##0.00', 26: '#,##0.00', 28: '@' });
 
   escribir_(ss, CFG.OUT_TARIFAS, [
     'Concepto', 'Período', 'Año', 'Mes', 'Tarifa Estimada', 'Cant. Recibos'

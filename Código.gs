@@ -26,8 +26,6 @@ function onOpen() {
     .addItem('Actualizar Informes', 'actualizarTodo')
     .addItem('Solo ingresos por concepto', 'generarIngresosDetalle')
     .addItem('Solo deuda esperada', 'generarDeudaEsperada')
-    .addSeparator()
-    .addItem('Programar actualización diaria', 'instalarTrigger')
     .addToUi();
 }
 /**
